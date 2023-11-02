@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             (Some(cat), name, repos) => update_category(cat, name, repos).await?,
             (None, _, _) => get_categories().await?,
         },
-        Commands::Sync => println!("sync"),
+        Commands::Sync => sync().await?,
         Commands::Prs { cat } => get_prs(cat).await?,
     }
 
@@ -128,6 +128,16 @@ async fn get_prs(cat: String) -> Result<(), Box<dyn Error>> {
         }
         table.printstd();
     }
+
+    Ok(())
+}
+
+async fn sync() -> Result<(), Box<dyn Error>> {
+    let client = reqwest::Client::new();
+    client
+        .post(format!("http://localhost:8000/sync"))
+        .send()
+        .await?;
 
     Ok(())
 }
