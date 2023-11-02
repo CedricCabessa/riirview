@@ -146,8 +146,10 @@ impl Repo {
             .select(Category::as_select())
             .first(connection)?;
 
+        use crate::schema::repos;
         let repo_list = Repo::belonging_to(&cat)
             .select(Repo::as_select())
+            .order(repos::name.desc())
             .load(connection)?;
 
         Ok(repo_list)

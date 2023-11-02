@@ -34,7 +34,10 @@ impl Notification {
         let api_url = &self.subject.url; // https://api.github.com/repos/LedgerHQ/<repo>/pulls/N
         let num = api_url.split("/").last().unwrap();
 
-        format!("https://github.com/{}/{}", self.repository.full_name, num)
+        format!(
+            "https://github.com/{}/pull/{}",
+            self.repository.full_name, num
+        )
     }
 
     pub fn repo(&self) -> &String {
