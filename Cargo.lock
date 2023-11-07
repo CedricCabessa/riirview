@@ -1375,6 +1375,7 @@ dependencies = [
  "reqwest",
  "rocket",
  "serde",
+ "url",
  "uuid",
 ]
 

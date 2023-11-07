@@ -1,9 +1,10 @@
-use log::info;
+use log::{debug, info};
 use regex::Regex;
 use reqwest::Response;
 use rocket::futures::{self, StreamExt, TryStreamExt};
 use serde::Deserialize;
 use std::env;
+use url::Url;
 
 #[derive(Deserialize, Debug)]
 pub struct Notification {
@@ -57,22 +58,50 @@ impl Notification {
     }
 }
 
+fn url_to_page(url: &str) -> Result<u32, Box<dyn std::error::Error>> {
+    let url = Url::parse(url)?;
+    let page = url
+        .query_pairs()
+        .find(|(key, _)| key == "page")
+        .ok_or("no page")?
+        .1
+        .into_owned()
+        .parse()?;
+
+    Ok(page)
+}
+
 fn pages_from_link(link: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let regex = Regex::new(r#"<(.*)\?page=(\d+)>; rel="next", <.*\?page=(\d+)>; rel="last""#);
+    let regex = Regex::new(r#"<(.*)>; rel="next", <(.*)>; rel="last""#);
 
     let matches = regex?.captures(link);
     if let Some(matches) = matches {
-        let url = matches.get(1).unwrap().as_str();
-        let second: u32 = matches.get(2).unwrap().as_str().parse()?;
-        let last: u32 = matches.get(3).unwrap().as_str().parse()?;
+        let next = matches.get(1).ok_or("link parse error")?.as_str();
+        let last = matches.get(2).ok_or("link parse error")?.as_str();
+        // choose "next" as base url, then change "page" query param
+        let url = Url::parse(next)?;
 
+        let next = url_to_page(next)?;
+        let last = url_to_page(last)?;
+        debug!("last page {}", last);
         let mut urls = vec![];
-        for page in second..last {
-            urls.push(format!("{}?page={}", url, page))
+        for page in next..last + 1 {
+            let mut new_url = url.clone();
+            let query = url.query_pairs().filter(|(name, _)| name != "page");
+
+            new_url
+                .query_pairs_mut()
+                .clear()
+                .extend_pairs(query)
+                .extend_pairs([("page", format!("{}", page))]);
+
+            debug!("add url {}", new_url.to_string());
+
+            urls.push(new_url.to_string());
         }
         Ok(urls)
     } else {
-        Ok(vec![])
+        Err("invalid link format".into())
     }
 }
 
@@ -96,7 +125,8 @@ async fn get_notifications(url: String) -> Result<Vec<Notification>, Box<dyn std
 }
 
 pub async fn gh() -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
-    let resp = get_url("https://api.github.com/notifications".into()).await?;
+    //TODO: add since
+    let resp = get_url("https://api.github.com/notifications?all=true".into()).await?;
 
     let mut repos = if let Some(link) = resp.headers().get("link") {
         let link = link.to_str()?;
@@ -118,4 +148,53 @@ pub async fn gh() -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
     repos.extend(res);
 
     Ok(repos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_link_basic() {
+        let link = r#"<https://api.github.com/notifications?page=2>; rel="next", <https://api.github.com/notifications?page=4>; rel="last""#;
+
+        assert_eq!(
+            pages_from_link(link).unwrap(),
+            vec![
+                "https://api.github.com/notifications?page=2",
+                "https://api.github.com/notifications?page=3",
+                "https://api.github.com/notifications?page=4"
+            ]
+        );
+    }
+    #[test]
+    fn test_link_nonext() {
+        let link = r#"<https://api.github.com/notifications?page=2>; rel="next", <https://api.github.com/notifications?page=2>; rel="last""#;
+
+        assert_eq!(
+            pages_from_link(link).unwrap(),
+            vec!["https://api.github.com/notifications?page=2",]
+        );
+    }
+
+    #[test]
+    fn test_link_invalid() {
+        let link = "not a link";
+
+        assert!(pages_from_link(link).is_err());
+    }
+
+    #[test]
+    fn test_link() {
+        let link = r#"<https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=2>; rel="next", <https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=4>; rel="last""#;
+
+        assert_eq!(
+            pages_from_link(link).unwrap(),
+            vec![
+		"https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=2",
+		"https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=3",
+		"https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=4"
+            ]
+        );
+    }
 }

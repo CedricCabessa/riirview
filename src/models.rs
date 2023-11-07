@@ -240,6 +240,7 @@ impl Pr {
         for repo in repos {
             let prs_list = Pr::belonging_to(&repo)
                 .filter(type_.eq("PullRequest"))
+                .filter(unread.eq(true))
                 .select(Pr::as_select())
                 .order(updated_at.desc())
                 .load(connection)?;
