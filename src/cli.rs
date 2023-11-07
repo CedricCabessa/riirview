@@ -137,7 +137,8 @@ async fn sync() -> Result<(), Box<dyn Error>> {
     client
         .post(format!("http://localhost:8000/sync"))
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
 
     Ok(())
 }
