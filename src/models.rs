@@ -275,6 +275,22 @@ impl Pr {
 
         Ok(res)
     }
+
+    pub fn last_update() -> Result<Option<String>, RiirViewError> {
+        use crate::schema::prs::dsl::*;
+        let connection = &mut establish_connection();
+
+        let recent_pr = prs
+            .select(Pr::as_select())
+            .order(updated_at.desc())
+            .first(connection)
+            .optional()?;
+
+        match recent_pr {
+            Some(recent_pr) => Ok(Some(recent_pr.updated_at)),
+            None => Ok(None),
+        }
+    }
 }
 
 pub fn establish_connection() -> SqliteConnection {

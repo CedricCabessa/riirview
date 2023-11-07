@@ -128,9 +128,18 @@ async fn get_notifications(url: String) -> Result<Vec<Notification>, Box<dyn std
     Ok(resp.json::<Vec<Notification>>().await?)
 }
 
-pub async fn gh() -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
-    //TODO: add since
-    let resp = get_url("https://api.github.com/notifications?all=true".into()).await?;
+pub async fn gh(
+    last_update: Option<&str>,
+) -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
+    let url = match last_update {
+        Some(last_update) => format!(
+            "https://api.github.com/notifications?all=true&since={}",
+            last_update
+        ),
+        None => "https://api.github.com/notifications?all=true".into(),
+    };
+
+    let resp = get_url(url).await?;
 
     let mut repos = if let Some(link) = resp.headers().get("link") {
         let link = link.to_str()?;

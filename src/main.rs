@@ -84,7 +84,9 @@ fn get_prs_uncategorized() -> Result<Json<HashMap<String, Vec<Pr>>>, BadRequest<
 
 #[post("/sync")]
 async fn sync() -> Result<(), BadRequest<String>> {
-    let res = gh::gh()
+    let last_update = Pr::last_update().map_err(|e| e.into())?;
+
+    let res = gh::gh(last_update.as_deref())
         .await
         .map_err(|e| BadRequest(Some(e.to_string())))?;
 
