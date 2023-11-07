@@ -17,7 +17,7 @@ pub struct Notification {
 #[derive(Deserialize, Debug)]
 pub struct Subject {
     title: String,
-    url: String,
+    url: Option<String>,
     r#type: String,
 }
 
@@ -32,13 +32,17 @@ impl Notification {
     }
 
     pub fn url(&self) -> String {
-        let api_url = &self.subject.url; // https://api.github.com/repos/LedgerHQ/<repo>/pulls/N
-        let num = api_url.split("/").last().unwrap();
+        if let Some(api_url) = &self.subject.url {
+            // https://api.github.com/repos/LedgerHQ/<repo>/pulls/N
+            let num = api_url.split("/").last().unwrap();
 
-        format!(
-            "https://github.com/{}/pull/{}",
-            self.repository.full_name, num
-        )
+            format!(
+                "https://github.com/{}/pull/{}",
+                self.repository.full_name, num
+            )
+        } else {
+            "".to_string()
+        }
     }
 
     pub fn repo(&self) -> &String {
