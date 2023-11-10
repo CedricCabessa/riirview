@@ -6,6 +6,6 @@ edition = "2021"
 [dependencies]
 gloo-net = "0.2"
 wasm-bindgen-futures = "0.4"
-serde = {version="1.0.189", features=["derive"]}
+serde = {version="1.0.192", features=["derive"]}
 yew = { version = "0.21", features = ["csr"] }
 libriirview = {path="../libriirview" }

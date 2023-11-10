@@ -7,6 +7,6 @@ edition = "2021"
 clap = {version="4.4.7", features=["derive"]}
 prettytable-rs = {version="0.10.0"}
 reqwest = {version="0.11", features = ["json"]}
-serde = {version="1.0.189", features=["derive"]}
+serde = {version="1.0.192", features=["derive"]}
 tokio = {version="1.34.0", features = ["full"]}
 libriirview = {path="../libriirview" }
