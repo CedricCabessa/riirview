@@ -7,7 +7,8 @@ edition = "2021"
 diesel = { version = "2.1.0", features = ["sqlite"] }
 log = {version = "0.4.20"}
 env_logger = { version = "0.10.0"}
-rocket = {version="0.5.0-rc.3", features=["json"]}
+rocket = {version="=0.5.0-rc.3", features=["json"]} # need =rc.3 for rocket_cors
+rocket_cors = "0.6.0-alpha2"
 regex = { version = "1.10.2"}
 reqwest = {version="0.11", features = ["json"]}
 serde = {version="1.0.189", features=["derive"]}

@@ -24,6 +24,6 @@ impl From<Error> for RiirViewError {
 
 impl Into<BadRequest<String>> for RiirViewError {
     fn into(self) -> BadRequest<String> {
-        BadRequest(self.detail)
+        BadRequest(Some(self.detail))
     }
 }

@@ -9,6 +9,7 @@ use libriirview::json::{
 };
 use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
+use rocket_cors::AllowedOrigins;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -102,7 +103,7 @@ async fn sync() -> Result<(), BadRequest<String>> {
 
     let res = gh::gh(last_update.as_deref())
         .await
-        .map_err(|e| BadRequest(e.to_string()))?;
+        .map_err(|e| BadRequest(Some(e.to_string())))?;
 
     service::add_notifications(res).map_err(|e| e.into())?;
 
@@ -112,6 +113,14 @@ async fn sync() -> Result<(), BadRequest<String>> {
 #[launch]
 fn rocket() -> _ {
     env_logger::init();
+
+    let allowed_origins = AllowedOrigins::some_exact(&["http://127.0.0.1:8080"]);
+    let cors = rocket_cors::CorsOptions {
+        allowed_origins,
+        ..Default::default()
+    }
+    .to_cors()
+    .unwrap();
     rocket::build()
         .mount("/", routes![get_categories])
         .mount("/", routes![get_category])
@@ -121,4 +130,5 @@ fn rocket() -> _ {
         .mount("/", routes![get_prs])
         .mount("/", routes![get_prs_uncategorized])
         .mount("/", routes![sync])
+        .attach(cors)
 }
