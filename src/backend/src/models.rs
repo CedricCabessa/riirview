@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::env;
 use uuid::Uuid;
 
-use crate::json::Category as CategoryJson;
-use crate::json::Pr as PrJson;
-use crate::json::Repo as RepoJson;
 use crate::RiirViewError;
+use libriirview::json::Category as CategoryJson;
+use libriirview::json::Pr as PrJson;
+use libriirview::json::Repo as RepoJson;
 
 #[derive(Queryable, Selectable, Insertable, Identifiable, Debug)]
 #[diesel(table_name = crate::schema::categories)]

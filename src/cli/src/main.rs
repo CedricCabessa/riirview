@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
+use libriirview::json::{Category, CategoryDetail, Pr};
 use prettytable::{row, Table};
-use riirview::json::{Category, CategoryDetail, Pr};
-use rocket::tokio;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::error::Error;
+use tokio;
 
 #[derive(Parser, Debug)]
 struct Cli {

@@ -1,5 +1,5 @@
 pub mod gh;
-pub mod json;
+pub mod riirv::json;
 pub mod models;
 pub mod schema;
 pub mod service;

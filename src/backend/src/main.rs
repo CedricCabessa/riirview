@@ -1,12 +1,12 @@
 #[macro_use]
 extern crate rocket;
 
-use riirview::gh;
-use riirview::json::{
+use backend::gh;
+use backend::models::{Category, Pr, Repo};
+use backend::service;
+use libriirview::json::{
     Category as CategoryJson, CategoryDetail as CategoryDetailJson, Pr as PrJson, Repo as RepoJson,
 };
-use riirview::models::{Category, Pr, Repo};
-use riirview::service;
 use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
 use serde::Deserialize;
@@ -102,7 +102,7 @@ async fn sync() -> Result<(), BadRequest<String>> {
 
     let res = gh::gh(last_update.as_deref())
         .await
-        .map_err(|e| BadRequest(Some(e.to_string())))?;
+        .map_err(|e| BadRequest(e.to_string()))?;
 
     service::add_notifications(res).map_err(|e| e.into())?;
 
