@@ -1,38 +1,23 @@
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use uuid::Uuid;
 
+use crate::json::Category as CategoryJson;
+use crate::json::Pr as PrJson;
+use crate::json::Repo as RepoJson;
 use crate::RiirViewError;
 
-#[derive(Serialize, Deserialize, Queryable, Selectable, Insertable, Identifiable, Debug)]
+#[derive(Queryable, Selectable, Insertable, Identifiable, Debug)]
 #[diesel(table_name = crate::schema::categories)]
 pub struct Category {
-    #[serde(skip)]
     id: i32,
-    pub uid: String, // pub for cli
-    pub name: String,
+    uid: String,
+    name: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct CategoryDetail {
-    #[serde(flatten)]
-    pub category: Category, // pub cli
-    pub repos: Vec<String>,
-}
-
-impl CategoryDetail {
-    pub fn new(category: Category, repos: Vec<Repo>) -> CategoryDetail {
-        CategoryDetail {
-            category,
-            repos: repos.iter().map(|r| r.name.clone()).collect(),
-        }
-    }
-}
-
-#[derive(Serialize, Queryable, Selectable, Insertable, Associations, Identifiable, Debug)]
+#[derive(Queryable, Selectable, Insertable, Associations, Identifiable, Debug)]
 #[diesel(belongs_to(Category))]
 #[diesel(table_name = crate::schema::repos)]
 pub struct Repo {
@@ -41,23 +26,36 @@ pub struct Repo {
     category_id: Option<i32>,
 }
 
-#[derive(
-    Serialize, Deserialize, Queryable, Selectable, Insertable, Associations, Identifiable, Debug,
-)]
+impl From<Repo> for RepoJson {
+    fn from(repo: Repo) -> RepoJson {
+        RepoJson {
+            name: repo.name,
+            category_id: repo.category_id,
+        }
+    }
+}
+
+#[derive(Queryable, Selectable, Insertable, Associations, Identifiable, Debug)]
 #[diesel(belongs_to(Repo))]
 #[diesel(table_name = crate::schema::prs)]
 pub struct Pr {
-    #[serde(skip)]
     id: i32,
-    pub title: String,
-    pub url: String,
-    #[serde(skip)]
+    title: String,
+    url: String,
     repo_id: i32,
-    #[serde(skip)]
     type_: String,
-    #[serde(skip)]
     unread: bool,
-    pub updated_at: String,
+    updated_at: String,
+}
+
+impl From<Pr> for PrJson {
+    fn from(pr: Pr) -> PrJson {
+        PrJson {
+            title: pr.title,
+            url: pr.url,
+            updated_at: pr.updated_at,
+        }
+    }
 }
 
 impl Category {
@@ -132,6 +130,15 @@ impl Category {
         let connection = &mut establish_connection();
         diesel::delete(categories.filter(uid.eq(&uid_))).execute(connection)?;
         Ok(())
+    }
+}
+
+impl From<Category> for CategoryJson {
+    fn from(cat: Category) -> CategoryJson {
+        CategoryJson {
+            uid: cat.uid,
+            name: cat.name,
+        }
     }
 }
 

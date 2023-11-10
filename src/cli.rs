@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use prettytable::{row, Table};
-use riirview::models::{Category, CategoryDetail, Pr};
+use riirview::json::{Category, CategoryDetail, Pr};
 use rocket::tokio;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -26,7 +26,6 @@ enum Commands {
         cat: String,
     },
 }
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
@@ -40,7 +39,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Commands::Sync => sync().await?,
         Commands::Prs { cat } => get_prs(cat).await?,
     }
-
     Ok(())
 }
 

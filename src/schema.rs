@@ -32,8 +32,4 @@ diesel::table! {
 diesel::joinable!(prs -> repos (repo_id));
 diesel::joinable!(repos -> categories (category_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    categories,
-    prs,
-    repos,
-);
+diesel::allow_tables_to_appear_in_same_query!(categories, prs, repos,);

@@ -2,7 +2,10 @@
 extern crate rocket;
 
 use riirview::gh;
-use riirview::models::{Category, CategoryDetail, Pr, Repo};
+use riirview::json::{
+    Category as CategoryJson, CategoryDetail as CategoryDetailJson, Pr as PrJson, Repo as RepoJson,
+};
+use riirview::models::{Category, Pr, Repo};
 use riirview::service;
 use rocket::response::status::BadRequest;
 use rocket::serde::json::Json;
@@ -21,14 +24,14 @@ struct UpdateCategory {
 }
 
 #[get("/categories")]
-fn get_categories() -> Json<Vec<Category>> {
-    Json(Category::all())
+fn get_categories() -> Json<Vec<CategoryJson>> {
+    Json(Category::all().into_iter().map(|c| c.into()).collect())
 }
 
 #[post("/categories", data = "<input>")]
-fn create_category(input: Json<CreateCategory>) -> Result<Json<Category>, BadRequest<String>> {
+fn create_category(input: Json<CreateCategory>) -> Result<Json<CategoryJson>, BadRequest<String>> {
     match Category::create(input.name.to_string()) {
-        Ok(cat) => Ok(Json(cat)),
+        Ok(cat) => Ok(Json(cat.into())),
         Err(e) => Err(e.into()),
     }
 }
@@ -37,7 +40,7 @@ fn create_category(input: Json<CreateCategory>) -> Result<Json<Category>, BadReq
 fn update_category(
     uid: String,
     input: Json<UpdateCategory>,
-) -> Result<Json<CategoryDetail>, BadRequest<String>> {
+) -> Result<Json<CategoryDetailJson>, BadRequest<String>> {
     if let Some(name) = &input.name {
         Category::edit_name(&uid, name).map_err(|e| e.into())?;
     };
@@ -50,24 +53,30 @@ fn update_category(
 }
 
 #[get("/categories/<uid>")]
-fn get_category(uid: String) -> Result<Json<CategoryDetail>, BadRequest<String>> {
+fn get_category(uid: String) -> Result<Json<CategoryDetailJson>, BadRequest<String>> {
     let cat = Category::find_by_uid(&uid);
 
     match cat {
         Ok(cat) => {
             let repos = Repo::by_category(&cat).map_err(|e| e.into())?;
+            let repos_json: Vec<RepoJson> = repos.into_iter().map(|r| r.into()).collect();
 
-            Ok(Json(CategoryDetail::new(cat, repos)))
+            Ok(Json(CategoryDetailJson::new(cat.into(), repos_json)))
         }
         Err(e) => Err(e.into()),
     }
 }
 
 #[get("/categories/<uid>/prs")]
-fn get_prs(uid: String) -> Result<Json<HashMap<String, Vec<Pr>>>, BadRequest<String>> {
+fn get_prs(uid: String) -> Result<Json<HashMap<String, Vec<PrJson>>>, BadRequest<String>> {
     let cat = Category::find_by_uid(&uid).map_err(|e| e.into())?;
 
     let pr_by_cat = Pr::by_category(&cat).map_err(|e| e.into())?;
+    let pr_by_cat: HashMap<String, Vec<PrJson>> = pr_by_cat
+        .into_iter()
+        .map(|(repo, prs)| (repo, prs.into_iter().map(|pr| pr.into()).collect()))
+        .collect();
+
     Ok(Json(pr_by_cat))
 }
 
@@ -77,8 +86,13 @@ fn del_category(uid: String) -> Result<(), BadRequest<String>> {
 }
 
 #[get("/prs/uncategorized")]
-fn get_prs_uncategorized() -> Result<Json<HashMap<String, Vec<Pr>>>, BadRequest<String>> {
+fn get_prs_uncategorized() -> Result<Json<HashMap<String, Vec<PrJson>>>, BadRequest<String>> {
     let pr_by_cat = Pr::uncategorized().map_err(|e| e.into())?;
+    let pr_by_cat: HashMap<String, Vec<PrJson>> = pr_by_cat
+        .into_iter()
+        .map(|(repo, prs)| (repo, prs.into_iter().map(|pr| pr.into()).collect()))
+        .collect();
+
     Ok(Json(pr_by_cat))
 }
 
