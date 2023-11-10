@@ -34,7 +34,7 @@ impl Notification {
     pub fn url(&self) -> String {
         if let Some(api_url) = &self.subject.url {
             // https://api.github.com/repos/LedgerHQ/<repo>/pulls/N
-            let num = api_url.split("/").last().unwrap();
+            let num = api_url.split('/').last().unwrap();
 
             format!(
                 "https://github.com/{}/pull/{}",
@@ -124,7 +124,7 @@ async fn get_url(url: String) -> Result<Response, Box<dyn std::error::Error>> {
 }
 
 async fn get_notifications(url: String) -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
-    let resp = get_url(url.into()).await?;
+    let resp = get_url(url).await?;
     Ok(resp.json::<Vec<Notification>>().await?)
 }
 
@@ -146,7 +146,7 @@ pub async fn gh(
         let urls = pages_from_link(link)?;
 
         futures::stream::iter(urls)
-            .map(|url| get_notifications(url))
+            .map(get_notifications)
             .buffer_unordered(30)
             .try_fold(vec![], |mut acc, x| async {
                 acc.extend(x);

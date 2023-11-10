@@ -6,14 +6,14 @@ use log::info;
 pub fn add_notifications(notifications: Vec<Notification>) -> Result<(), RiirViewError> {
     info!("notifications numbers {}", notifications.len());
     for notification in notifications {
-        Repo::insert(&notification.repo())?;
+        Repo::insert(notification.repo())?;
         Pr::insert(
-            &notification.title(),
+            notification.title(),
             &notification.url(),
-            &notification.repo(),
-            &notification.r#type(),
+            notification.repo(),
+            notification.r#type(),
             notification.unread(),
-            &notification.updated_at(),
+            notification.updated_at(),
         )?;
     }
     Ok(())

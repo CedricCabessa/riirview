@@ -133,7 +133,7 @@ async fn get_prs(cat: String) -> Result<(), Box<dyn Error>> {
 async fn sync() -> Result<(), Box<dyn Error>> {
     let client = reqwest::Client::new();
     client
-        .post(format!("http://localhost:8000/sync"))
+        .post("http://localhost:8000/sync".to_string())
         .send()
         .await?
         .error_for_status()?;
