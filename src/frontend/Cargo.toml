@@ -9,3 +9,4 @@ wasm-bindgen-futures = "0.4"
 serde = {version="1.0.192", features=["derive"]}
 yew = { version = "0.21", features = ["csr"] }
 libriirview = {path="../libriirview" }
+yew-router = "0.18.0"

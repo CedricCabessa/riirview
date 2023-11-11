@@ -28,7 +28,7 @@ pub struct Repo {
     pub category_id: Option<i32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct Pr {
     pub title: String,
     pub url: String,
