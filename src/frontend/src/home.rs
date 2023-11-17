@@ -6,6 +6,7 @@ use yew::prelude::*;
 use yew_router::prelude::*;
 
 #[function_component(AppContent)]
+#[rustfmt::skip::macros(html)]
 pub fn app_content() -> HtmlResult {
     let categories = use_state(|| Ok(vec![]));
     {
@@ -21,7 +22,14 @@ pub fn app_content() -> HtmlResult {
     }
 
     let html = match &(*categories) {
-        Ok(state) => html! {<Categories categories={(*state).clone()} />},
+        Ok(state) => {
+            html! {
+              <nav class={classes!("panel")}>
+                <p class={classes!("panel-heading")}>{"Categories"}</p>
+                <Categories categories={(*state).clone()}/>
+              </nav>
+           }
+        }
         Err(e) => html! {<p>{e.to_string()}</p>},
     };
     Ok(html)
@@ -38,12 +46,15 @@ struct CategoriesProps {
 }
 
 #[function_component(Categories)]
+#[rustfmt::skip::macros(html)]
 fn component_category(CategoriesProps { categories }: &CategoriesProps) -> Html {
     categories
         .iter()
         .map(|cat| {
             html! {
-		<div key={cat.uid.clone()}><Link<Route> to={Route::Category{ uid: cat.uid.clone()}}>{cat.name.clone()}</Link<Route>></div>
+              <div class={classes!("panel-block")} key={cat.uid.clone()}>
+                <Link<Route> to={Route::Category{ uid: cat.uid.clone()}}>{cat.name.clone()}</Link<Route>>
+              </div>
             }
         })
         .collect()

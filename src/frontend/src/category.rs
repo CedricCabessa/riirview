@@ -55,25 +55,32 @@ struct PrsProps {
 }
 
 #[function_component(ReposPrs)]
+#[rustfmt::skip::macros(html)]
 fn repos_prs_category(ReposPrsProps { repos_prs }: &ReposPrsProps) -> Html {
     repos_prs
         .iter()
         .map(|(repo, prs)| {
             html! {
-                <div>
-                    <div>{repo}</div>
-            <PrsContent prs={prs.clone()}/>
-                </div>
+              <nav class="panel">
+                <p class={classes!("panel-heading")}>{repo}</p>
+		<PrsContent prs={prs.clone()}/>
+              </nav>
             }
         })
         .collect()
 }
 
 #[function_component(PrsContent)]
+#[rustfmt::skip::macros(html)]
 fn prs_content(PrsProps { prs }: &PrsProps) -> Html {
     prs.iter()
         .map(|pr| {
-            html! { <div><div>{pr.title.clone()}</div><div>{pr.url.clone()}</div></div>}
+            html! {
+              <p class={classes!("panel-block")}>
+                <a href={pr.url.clone()}>{pr.title.clone()}</a>
+                <div class={classes!("ml-auto")}>{pr.updated_at.clone()}</div>
+              </p>
+	    }
         })
         .collect()
 }
