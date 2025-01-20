@@ -6,6 +6,8 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use riirview::{service, tui};
 
+// TODO: auto refresh
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv()?;

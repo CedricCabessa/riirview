@@ -12,4 +12,5 @@ pub struct Notification {
     pub unread: bool,
     pub updated_at: NaiveDateTime,
     pub done: bool,
+    pub score: i32,
 }

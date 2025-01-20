@@ -1,5 +1,6 @@
 use crate::models::Notification as DBNotification;
 use crate::*;
+use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::update;
@@ -18,6 +19,7 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
     let gh_notifications = gh::fetch_notifications(last_update).await?;
 
     for gh_notification in gh_notifications {
+        let computed_score = compute_score(&gh_notification);
         let db_notification = DBNotification {
             id: gh_notification.id().to_owned(),
             title: gh_notification.title().to_owned(),
@@ -27,6 +29,7 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
             unread: gh_notification.unread(),
             updated_at: gh_notification.updated_at(),
             done: false,
+            score: computed_score,
         };
         let res = insert_into(notifications)
             .values(&db_notification)
@@ -50,7 +53,7 @@ pub async fn get_notifications() -> Result<Vec<DBNotification>, Box<dyn std::err
     Ok(notifications
         .select(DBNotification::as_select())
         .filter(done.eq(false))
-        .order_by(updated_at.desc())
+        .order_by((score.desc(), updated_at.desc()))
         .load(connection)?)
 }
 
@@ -76,13 +79,17 @@ pub async fn mark_notification_as_read(
     Ok(())
 }
 
-fn get_recent_update(connection: &mut SqliteConnection) -> Option<String> {
+fn get_recent_update(connection: &mut SqliteConnection) -> Option<NaiveDateTime> {
     let recent_pr = notifications
         .select(DBNotification::as_select())
         .order_by(updated_at.desc())
         .first(connection);
-    let last_update = recent_pr.map(|notif| notif.updated_at.to_string()).ok();
+    let last_update = recent_pr.map(|notif| notif.updated_at).ok();
     info!("recent pr {:?}", last_update);
 
     last_update
+}
+
+fn compute_score(notification: &gh::Notification) -> i32 {
+    0
 }

@@ -1,6 +1,7 @@
 pub mod gh;
 pub mod models;
 pub mod schema;
+pub mod score;
 pub mod service;
 pub mod tui;
 

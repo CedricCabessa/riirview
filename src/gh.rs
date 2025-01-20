@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 use futures::stream::iter;
 use futures::StreamExt;
 use futures::TryStreamExt;
@@ -117,14 +117,19 @@ impl Client {
 
     pub async fn get_notifications(
         &self,
-        last_update: Option<String>,
+        last_update: Option<NaiveDateTime>,
     ) -> Result<Response, Box<dyn std::error::Error>> {
         let url = match last_update {
-            Some(last_update) => format!(
-                "{}/notifications?all=true&since={}",
-                self.base_url, last_update
-            ),
-            None => format!("{}/notifications?all=true", self.base_url),
+            Some(last_update) => {
+                let since = last_update
+                    .and_local_timezone(Utc)
+                    .single()
+                    .unwrap()
+                    .to_rfc3339()
+                    .replace("+00:00", "Z"); //FIXME: we should avoid this stupid replace
+                format!("{}/notifications?all=true&since={}", self.base_url, since)
+            }
+            None => format!("{}/notifications", self.base_url),
         };
 
         let resp = self.get(url).await?;
@@ -151,11 +156,16 @@ impl Client {
 
     pub async fn need_update(
         &self,
-        last_update: String,
+        last_update: NaiveDateTime,
     ) -> Result<Response, Box<dyn std::error::Error>> {
         let url = format!("{}/notifications", self.base_url);
         let mut custom_headers = HeaderMap::new();
-        custom_headers.insert("If-Modified-Since", last_update.parse()?);
+        let since = last_update
+            .and_local_timezone(Utc)
+            .single()
+            .unwrap()
+            .to_rfc2822();
+        custom_headers.insert("If-Modified-Since", since.parse()?);
         self.head(url, Some(custom_headers)).await
     }
 
@@ -270,7 +280,7 @@ async fn get_notifications(url: String) -> Result<Vec<Notification>, Box<dyn std
 }
 
 pub async fn fetch_notifications(
-    last_update: Option<String>,
+    last_update: Option<NaiveDateTime>,
 ) -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
     let client = Client::new()?;
     let resp = client.get_notifications(last_update).await?;
@@ -305,7 +315,9 @@ pub async fn mark_as_read(id: &String) -> Result<(), Box<dyn std::error::Error>>
     Client::new()?.mark_notification_read(id).await
 }
 
-pub async fn need_update(last_update: Option<String>) -> Result<bool, Box<dyn std::error::Error>> {
+pub async fn need_update(
+    last_update: Option<NaiveDateTime>,
+) -> Result<bool, Box<dyn std::error::Error>> {
     if let Some(last_update) = last_update {
         let client = Client::new()?;
         let resp = client.need_update(last_update).await?;

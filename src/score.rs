@@ -1,0 +1,130 @@
+use crate::gh::Notification;
+use log::debug;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs;
+
+#[derive(PartialEq, Eq, Debug)]
+enum RuleType {
+    Author,
+    Participating,
+    Repo,
+}
+
+#[derive(Deserialize, Debug)]
+struct TomlRule {
+    rule: String,
+    param: String,
+    score: i32,
+}
+
+#[derive(Debug)]
+struct Rule {
+    rule: RuleType,
+    name: String,
+    params: Vec<String>,
+    score: i32,
+}
+
+impl Rule {
+    pub fn matcher(&self, notification: &Notification) -> i32 {
+        let fct = match self.rule {
+            RuleType::Author => rule_author,
+            RuleType::Participating => rule_participating,
+            RuleType::Repo => rule_repo,
+        };
+        if fct(notification, &self.params) {
+            debug!("{} match {}", notification.title(), self.name);
+            self.score
+        } else {
+            0
+        }
+    }
+}
+
+pub struct Scorer {
+    rules: Vec<Rule>,
+}
+
+impl Scorer {
+    pub fn build(toml_path: &str) -> Result<Scorer, Box<dyn std::error::Error>> {
+        let config = fs::read_to_string(toml_path)?;
+
+        //let value = config.parse::<HashMap<String, Rule>>();
+        let toml_rules: HashMap<String, TomlRule> = toml::from_str(&config)?;
+        let rules: Result<Vec<Rule>, String> = toml_rules
+            .iter()
+            .map(|(name, r)| {
+                Ok::<Rule, String>(Rule {
+                    rule: rule_from_str(&r.rule)?,
+                    params: r.param.split(",").map(|s| s.trim().into()).collect(),
+                    score: r.score,
+                    name: name.into(),
+                })
+            })
+            .collect::<Vec<Result<Rule, String>>>()
+            .into_iter()
+            .collect();
+        debug!("rules: {:?}", rules);
+
+        Ok(Scorer { rules: rules? })
+    }
+
+    pub fn score(self, notification: &Notification) -> i32 {
+        self.rules
+            .iter()
+            .fold(0, |acc, rule| acc + rule.matcher(&notification))
+    }
+}
+
+fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
+    match rule_name {
+        "author" => Ok(RuleType::Author),
+        "participating" => Ok(RuleType::Participating),
+        "repo" => Ok(RuleType::Repo),
+        _ => Err(format!("Unknown rule name: {}", rule_name).into()),
+    }
+}
+
+fn rule_author(_notification: &Notification, _params: &Vec<String>) -> bool {
+    false
+}
+
+fn rule_participating(_notification: &Notification, _params: &Vec<String>) -> bool {
+    false
+}
+
+fn rule_repo(_notification: &Notification, _params: &Vec<String>) -> bool {
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_scorer_builder() {
+        let path = "tests/rules.toml";
+        let scorer = Scorer::build(path).unwrap();
+
+        assert_eq!(scorer.rules.len(), 5);
+        let display_names: HashSet<String> = scorer.rules.iter().map(|r| r.name.clone()).collect();
+        assert_eq!(
+            display_names,
+            HashSet::from([
+                "me".into(),
+                "participating".into(),
+                "friends".into(),
+                "api".into(),
+                "tradelink".into()
+            ])
+        );
+
+        let tl_rule = scorer.rules.iter().find(|r| r.name == "tradelink").unwrap();
+
+        assert_eq!(tl_rule.rule, RuleType::Repo);
+        assert_eq!(tl_rule.params, vec!["ledger-vault-api", "vault-tradelink"]);
+        assert_eq!(tl_rule.score, 10);
+    }
+}

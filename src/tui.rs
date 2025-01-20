@@ -76,7 +76,7 @@ fn draw(
 ) {
     let status = if error.is_empty() {
         if info.is_empty() {
-            "Riirview".to_string()
+            format!("Riirview, {} notifs", notifications.len())
         } else {
             info.to_string()
         }
@@ -156,8 +156,15 @@ async fn need_update() -> Result<bool, String> {
 //TODO: proper padding & alignment, test window resize
 impl From<&Notification> for Text<'_> {
     fn from(notification: &Notification) -> Self {
+        let icon = match notification.type_.as_ref() {
+            "Issue" => "🐛",
+            "Release" => "🚢",
+            "PullRequest" => "📩",
+            _ => "❓",
+        };
         let txt = format!(
-            "{:<30} {}",
+            "{} {:<30} {}",
+            icon,
             notification.repo.clone(),
             notification.title.clone()
         );

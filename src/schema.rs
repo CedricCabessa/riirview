@@ -11,5 +11,6 @@ diesel::table! {
         updated_at -> Timestamp,
         unread -> Bool,
         done -> Bool,
+        score -> Integer,
     }
 }
