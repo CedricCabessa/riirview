@@ -51,6 +51,8 @@ pub async fn run(notifications: &mut Vec<Notification>) -> Result<(), Box<dyn st
                     info.clear();
                     Ok(())
                 }
+                KeyCode::Char('+') => update_score(list_state.selected(), notifications, 10).await,
+                KeyCode::Char('-') => update_score(list_state.selected(), notifications, -10).await,
 
                 KeyCode::Enter => open_gh(list_state.selected(), notifications).await,
                 KeyCode::Char('r') => mark_as_done(list_state.selected(), notifications).await,
@@ -151,6 +153,24 @@ async fn need_update() -> Result<bool, String> {
         error!("need update {:?}", err);
         "cannot ask for update".into()
     })
+}
+
+async fn update_score(
+    idx: Option<usize>,
+    notifications: &[Notification],
+    modifier: i32,
+) -> Result<(), String> {
+    if let Some(idx) = idx {
+        if let Some(notification) = notifications.get(idx) {
+            return service::update_score(notification, modifier)
+                .await
+                .map_err(|err| {
+                    error!("error in score update {:?}", err);
+                    "cannot update score".into()
+                });
+        }
+    }
+    Ok(())
 }
 
 //TODO: add add pr number, author, etc

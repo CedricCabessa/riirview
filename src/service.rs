@@ -83,6 +83,17 @@ pub async fn mark_notification_as_read(
     Ok(())
 }
 
+pub async fn update_score(
+    notification: &DBNotification,
+    modifier: i32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let connection = &mut establish_connection();
+    update(notification)
+        .set(score.eq(notification.score + modifier))
+        .execute(connection)?;
+    Ok(())
+}
+
 fn get_recent_update(connection: &mut SqliteConnection) -> Option<NaiveDateTime> {
     let recent_pr = notifications
         .select(DBNotification::as_select())
