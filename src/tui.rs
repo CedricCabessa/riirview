@@ -56,6 +56,9 @@ pub async fn run(notifications: &mut Vec<Notification>) -> Result<(), Box<dyn st
 
                 KeyCode::Enter => open_gh(list_state.selected(), notifications).await,
                 KeyCode::Char('r') => mark_as_done(list_state.selected(), notifications).await,
+                KeyCode::Char('R') => {
+                    mark_all_below_as_done(list_state.selected(), notifications).await
+                }
                 KeyCode::Char('g') => sync().await,
                 _ => Ok(()),
             };
@@ -117,6 +120,21 @@ async fn mark_as_done(idx: Option<usize>, notifications: &[Notification]) -> Res
             return match service::mark_notification_as_done(notification).await {
                 Ok(_) => Ok(()),
                 Err(e) => Err(format!("Failed to mark as done {}", e)),
+            };
+        }
+    }
+    Ok(())
+}
+
+async fn mark_all_below_as_done(
+    idx: Option<usize>,
+    notifications: &[Notification],
+) -> Result<(), String> {
+    if let Some(idx) = idx {
+        for notification in notifications.iter().skip(idx) {
+            match service::mark_notification_as_done(notification).await {
+                Ok(_) => (),
+                Err(e) => return Err(format!("Failed to mark as done {}", e)),
             };
         }
     }
