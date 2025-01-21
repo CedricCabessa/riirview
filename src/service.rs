@@ -1,4 +1,5 @@
 use crate::models::Notification as DBNotification;
+use crate::score::Scorer;
 use crate::*;
 use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
@@ -17,9 +18,12 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
     let connection = &mut establish_connection();
     let last_update = get_recent_update(connection);
     let gh_notifications = gh::fetch_notifications(last_update).await?;
+    let scorer = Scorer::new("rules.toml")?;
 
     for gh_notification in gh_notifications {
-        let computed_score = compute_score(&gh_notification);
+        // FIXME: should it be dbnotification here?
+        // need to fetch all pr data and improve the object
+        let computed_score = scorer.score(&gh_notification);
         let db_notification = DBNotification {
             id: gh_notification.id().to_owned(),
             title: gh_notification.title().to_owned(),
@@ -88,8 +92,4 @@ fn get_recent_update(connection: &mut SqliteConnection) -> Option<NaiveDateTime>
     info!("recent pr {:?}", last_update);
 
     last_update
-}
-
-fn compute_score(notification: &gh::Notification) -> i32 {
-    0
 }

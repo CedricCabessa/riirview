@@ -9,6 +9,7 @@ enum RuleType {
     Author,
     Participating,
     Repo,
+    Title,
 }
 
 #[derive(Deserialize, Debug)]
@@ -32,6 +33,7 @@ impl Rule {
             RuleType::Author => rule_author,
             RuleType::Participating => rule_participating,
             RuleType::Repo => rule_repo,
+            RuleType::Title => rule_title,
         };
         if fct(notification, &self.params) {
             debug!("{} match {}", notification.title(), self.name);
@@ -47,7 +49,7 @@ pub struct Scorer {
 }
 
 impl Scorer {
-    pub fn build(toml_path: &str) -> Result<Scorer, Box<dyn std::error::Error>> {
+    pub fn new(toml_path: &str) -> Result<Scorer, Box<dyn std::error::Error>> {
         let config = fs::read_to_string(toml_path)?;
 
         //let value = config.parse::<HashMap<String, Rule>>();
@@ -70,7 +72,7 @@ impl Scorer {
         Ok(Scorer { rules: rules? })
     }
 
-    pub fn score(self, notification: &Notification) -> i32 {
+    pub fn score(&self, notification: &Notification) -> i32 {
         self.rules
             .iter()
             .fold(0, |acc, rule| acc + rule.matcher(&notification))
@@ -82,6 +84,7 @@ fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
         "author" => Ok(RuleType::Author),
         "participating" => Ok(RuleType::Participating),
         "repo" => Ok(RuleType::Repo),
+        "title" => Ok(RuleType::Title),
         _ => Err(format!("Unknown rule name: {}", rule_name).into()),
     }
 }
@@ -94,8 +97,12 @@ fn rule_participating(_notification: &Notification, _params: &Vec<String>) -> bo
     false
 }
 
-fn rule_repo(_notification: &Notification, _params: &Vec<String>) -> bool {
-    false
+fn rule_repo(notification: &Notification, params: &Vec<String>) -> bool {
+    params.contains(notification.repo())
+}
+
+fn rule_title(notification: &Notification, params: &Vec<String>) -> bool {
+    params.iter().any(|p| notification.title().contains(p))
 }
 
 #[cfg(test)]
@@ -106,7 +113,7 @@ mod tests {
     #[test]
     fn test_scorer_builder() {
         let path = "tests/rules.toml";
-        let scorer = Scorer::build(path).unwrap();
+        let scorer = Scorer::new(path).unwrap();
 
         assert_eq!(scorer.rules.len(), 5);
         let display_names: HashSet<String> = scorer.rules.iter().map(|r| r.name.clone()).collect();

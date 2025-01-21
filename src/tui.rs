@@ -1,5 +1,6 @@
 use crate::models::Notification;
 use crate::service;
+use chrono_humanize::HumanTime;
 use log::error;
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::style::{Modifier, Style};
@@ -46,7 +47,7 @@ pub async fn run(notifications: &mut Vec<Notification>) -> Result<(), Box<dyn st
                     Ok(())
                 }
                 KeyCode::PageUp => {
-                    list_state.scroll_down_by(10);
+                    list_state.scroll_up_by(10);
                     info.clear();
                     Ok(())
                 }
@@ -163,10 +164,12 @@ impl From<&Notification> for Text<'_> {
             _ => "❓",
         };
         let txt = format!(
-            "{} {:<30} {}",
+            "{:>2} {} {:<20} {:<30} {}",
+            notification.score,
             icon,
+            HumanTime::from(notification.updated_at.and_utc()),
             notification.repo.clone(),
-            notification.title.clone()
+            notification.title.clone(),
         );
         let style = if notification.unread {
             Style::default().add_modifier(Modifier::BOLD)
