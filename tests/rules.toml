@@ -1,24 +1,19 @@
-  [me]
-  rule="author"
-  param="CedricCabessa"
-  score=100
+[me]
+rule="author"
+param="JohnDoe"
+score=100
 
-  [participating]
-  rule="participating"
-  param="CedricCabessa"
-  score=100
+[participating]
+rule="participating"
+param="JohnDoe"
+score=100
 
-  [friends]
-  rule="author"
-  param="Alex,Jerem,Dany"
-  score=10
+[friends]
+rule="author"
+param="torvalds@linux-foundation.org, rms@gnu.org"
+score=10
 
-  [api]
-  rule="repo"
-  param="ledger-vault-api, api-gateway, lam"
-  score=5
-
-  [tradelink]
-  rule="repo"
-  param="ledger-vault-api, vault-tradelink"    # ledger-vault-api is cumulative
-  score=10
+[my_fav_repos]
+rule="repo"
+param="torvalds/linux, emacs-mirror/emacs"
+score=5

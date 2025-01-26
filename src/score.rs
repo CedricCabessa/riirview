@@ -115,7 +115,7 @@ mod tests {
         let path = "tests/rules.toml";
         let scorer = Scorer::new(path).unwrap();
 
-        assert_eq!(scorer.rules.len(), 5);
+        assert_eq!(scorer.rules.len(), 4);
         let display_names: HashSet<String> = scorer.rules.iter().map(|r| r.name.clone()).collect();
         assert_eq!(
             display_names,
@@ -123,15 +123,18 @@ mod tests {
                 "me".into(),
                 "participating".into(),
                 "friends".into(),
-                "api".into(),
-                "tradelink".into()
+                "my_fav_repos".into(),
             ])
         );
 
-        let tl_rule = scorer.rules.iter().find(|r| r.name == "tradelink").unwrap();
+        let tl_rule = scorer
+            .rules
+            .iter()
+            .find(|r| r.name == "my_fav_repos")
+            .unwrap();
 
         assert_eq!(tl_rule.rule, RuleType::Repo);
-        assert_eq!(tl_rule.params, vec!["ledger-vault-api", "vault-tradelink"]);
-        assert_eq!(tl_rule.score, 10);
+        assert_eq!(tl_rule.params, vec!["torvalds/linux", "emacs-mirror/emacs"]);
+        assert_eq!(tl_rule.score, 5);
     }
 }
