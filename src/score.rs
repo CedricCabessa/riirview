@@ -75,7 +75,7 @@ impl Scorer {
     pub fn score(&self, notification: &Notification) -> i32 {
         self.rules
             .iter()
-            .fold(0, |acc, rule| acc + rule.matcher(&notification))
+            .fold(0, |acc, rule| acc + rule.matcher(notification))
     }
 }
 
@@ -85,23 +85,23 @@ fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
         "participating" => Ok(RuleType::Participating),
         "repo" => Ok(RuleType::Repo),
         "title" => Ok(RuleType::Title),
-        _ => Err(format!("Unknown rule name: {}", rule_name).into()),
+        _ => Err(format!("Unknown rule name: {}", rule_name)),
     }
 }
 
-fn rule_author(_notification: &Notification, _params: &Vec<String>) -> bool {
+fn rule_author(_notification: &Notification, _params: &[String]) -> bool {
     false
 }
 
-fn rule_participating(_notification: &Notification, _params: &Vec<String>) -> bool {
+fn rule_participating(_notification: &Notification, _params: &[String]) -> bool {
     false
 }
 
-fn rule_repo(notification: &Notification, params: &Vec<String>) -> bool {
+fn rule_repo(notification: &Notification, params: &[String]) -> bool {
     params.contains(notification.repo())
 }
 
-fn rule_title(notification: &Notification, params: &Vec<String>) -> bool {
+fn rule_title(notification: &Notification, params: &[String]) -> bool {
     params.iter().any(|p| notification.title().contains(p))
 }
 
