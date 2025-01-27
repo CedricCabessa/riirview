@@ -198,7 +198,11 @@ impl From<&Notification> for Text<'_> {
         let icon = match notification.type_.as_ref() {
             "Issue" => "🐛",
             "Release" => "🚢",
-            "PullRequest" => "📩",
+            "PullRequest" => match (notification.pr_draft, notification.pr_merged) {
+                (true, _) => "📝",
+                (false, true) => "📪",
+                (false, false) => "📬",
+            },
             _ => "❓",
         };
         let txt = format!(
@@ -209,11 +213,14 @@ impl From<&Notification> for Text<'_> {
             notification.repo.clone(),
             notification.title.clone(),
         );
+
+        let style = Style::default();
         let style = if notification.unread {
-            Style::default().add_modifier(Modifier::BOLD)
+            style.add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(ratatui::style::Color::Gray)
+            style
         };
+
         Text::styled(txt, style)
     }
 }
