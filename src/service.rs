@@ -5,7 +5,7 @@ use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::update;
-use log::{error, info};
+use log::{debug, error, info};
 use schema::notifications::dsl::*;
 
 pub async fn need_update() -> Result<bool, Box<dyn std::error::Error>> {
@@ -17,14 +17,16 @@ pub async fn need_update() -> Result<bool, Box<dyn std::error::Error>> {
 pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
     let connection = &mut establish_connection();
     let last_update = get_recent_update(connection);
+
     let gh_notifications = gh::fetch_notifications(last_update).await?;
+    let gh_prs = gh::fetch_prs(&gh_notifications).await?;
+
     let scorer = Scorer::new("rules.toml")?;
 
+    info!("inserting {} notifications", gh_notifications.len());
     for gh_notification in gh_notifications {
-        // FIXME: should it be dbnotification here?
-        // need to fetch all pr data and improve the object
-        let computed_score = scorer.score(&gh_notification);
-        let db_notification = DBNotification {
+        let pr = gh_prs.iter().find(|pr| pr.url == gh_notification.pr_url());
+        let mut db_notification = DBNotification {
             id: gh_notification.id().to_owned(),
             title: gh_notification.title().to_owned(),
             url: gh_notification.url().to_owned(),
@@ -33,8 +35,21 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
             unread: gh_notification.unread(),
             updated_at: gh_notification.updated_at(),
             done: false,
-            score: computed_score,
+            score: -1,
+            pr_state: pr.map_or(String::new(), |pr| pr.state.clone()),
+            pr_number: pr.map_or(-1, |pr| pr.number),
+            pr_draft: pr.is_some_and(|pr| pr.draft),
+            pr_merged: pr.is_some_and(|pr| pr.merged),
+            pr_author: pr.map_or(String::new(), |pr| pr.user.login.clone()),
         };
+        let computed_score = scorer.score(&db_notification);
+        db_notification.score = computed_score;
+        debug!(
+            "score {} for {} {}",
+            computed_score,
+            db_notification.title,
+            db_notification.url // TODO: display trait
+        );
         let res = insert_into(notifications)
             .values(&db_notification)
             .on_conflict(id)

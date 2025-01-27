@@ -13,4 +13,10 @@ pub struct Notification {
     pub updated_at: NaiveDateTime,
     pub done: bool,
     pub score: i32,
+    // from pull request
+    pub pr_state: String,
+    pub pr_number: i32,
+    pub pr_draft: bool,
+    pub pr_merged: bool,
+    pub pr_author: String,
 }

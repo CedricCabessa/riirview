@@ -12,5 +12,10 @@ diesel::table! {
         unread -> Bool,
         done -> Bool,
         score -> Integer,
+        pr_state -> Text,
+        pr_number -> Integer,
+        pr_draft -> Bool,
+        pr_merged -> Bool,
+        pr_author -> Text,
     }
 }

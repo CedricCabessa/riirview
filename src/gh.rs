@@ -10,8 +10,6 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use url::Url;
 
-//TODO: add info type PR? is merged? etc
-
 #[derive(Deserialize, Debug)]
 pub struct Notification {
     id: String,
@@ -73,6 +71,10 @@ impl Notification {
         }
     }
 
+    pub fn pr_url(&self) -> String {
+        self.subject.url.clone().unwrap_or_default()
+    }
+
     pub fn repo(&self) -> &String {
         &self.repository.full_name
     }
@@ -88,6 +90,21 @@ impl Notification {
     pub fn unread(&self) -> bool {
         self.unread
     }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct PullRequest {
+    pub url: String,
+    pub state: String, // TODO enum?
+    pub number: i32,
+    pub draft: bool,
+    pub merged: bool,
+    pub user: User,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct User {
+    pub login: String,
 }
 
 struct Client {
@@ -279,6 +296,12 @@ async fn get_notifications(url: String) -> Result<Vec<Notification>, Box<dyn std
     Ok(resp.json::<Vec<Notification>>().await?)
 }
 
+async fn get_pr(url: String) -> Result<PullRequest, Box<dyn std::error::Error>> {
+    let client = Client::new()?;
+    let resp = client.get(url).await?;
+    Ok(resp.json::<PullRequest>().await?)
+}
+
 pub async fn fetch_notifications(
     last_update: Option<NaiveDateTime>,
 ) -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
@@ -305,6 +328,30 @@ pub async fn fetch_notifications(
     repos.extend(res);
 
     Ok(repos)
+}
+
+pub async fn fetch_prs(
+    notifications: &[Notification],
+) -> Result<Vec<PullRequest>, Box<dyn std::error::Error>> {
+    let urls: Vec<String> = notifications
+        .iter()
+        .filter_map(|notif| {
+            if notif.subject.r#type == "PullRequest" {
+                notif.subject.url.clone()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    iter(urls)
+        .map(get_pr)
+        .buffer_unordered(30)
+        .try_fold(vec![], |mut acc, x| async {
+            acc.push(x);
+            Ok(acc)
+        })
+        .await
 }
 
 pub async fn mark_as_done(id: &String) -> Result<(), Box<dyn std::error::Error>> {
