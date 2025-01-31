@@ -189,8 +189,6 @@ async fn update_score(
     Ok(())
 }
 
-//TODO: add add pr number, author, etc
-//TODO: proper padding & alignment, test window resize
 impl From<&Notification> for Text<'_> {
     fn from(notification: &Notification) -> Self {
         let icon = match notification.type_.as_ref() {
@@ -204,12 +202,16 @@ impl From<&Notification> for Text<'_> {
             _ => "❓",
         };
         let txt = format!(
-            "{:>2} {} {:<20} {:<30} {}",
-            notification.score,
-            icon,
-            HumanTime::from(notification.updated_at.and_utc()),
-            notification.repo.clone(),
-            notification.title.clone(),
+            "{score:>3} {icon} {time:<15} {author:15} {repo:<30} {title}",
+            score = notification.score,
+            icon = icon,
+            time = ellipsis(
+                &HumanTime::from(notification.updated_at.and_utc()).to_string(),
+                15
+            ),
+            author = ellipsis(&notification.pr_author, 15),
+            repo = ellipsis(&notification.repo, 30),
+            title = ellipsis(&notification.title, 80),
         );
 
         let style = Style::default();
@@ -220,5 +222,32 @@ impl From<&Notification> for Text<'_> {
         };
 
         Text::styled(txt, style)
+    }
+}
+
+fn ellipsis(txt: &str, max_len: usize) -> String {
+    if txt.len() > max_len {
+        let substr = &txt[0..max_len - 1];
+        let mut res = substr.to_owned();
+
+        res.push('…');
+        res
+    } else {
+        let mut res = txt.to_owned();
+        let whitespace = vec![' '; max_len - txt.len()];
+        let whitespace: String = whitespace.iter().collect();
+        res.push_str(&whitespace);
+        res
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ellipsis() {
+        assert_eq!(ellipsis("lorem ipsum", 5), "lore…");
+        assert_eq!(ellipsis("lorem ipsum", 13), "lorem ipsum  ");
     }
 }
