@@ -131,12 +131,10 @@ async fn mark_all_below_as_done(
     notifications: &[Notification],
 ) -> Result<(), String> {
     if let Some(idx) = idx {
-        for notification in notifications.iter().skip(idx) {
-            match service::mark_notification_as_done(notification).await {
-                Ok(_) => (),
-                Err(e) => return Err(format!("Failed to mark as done {}", e)),
-            };
-        }
+        let selected_notifications = notifications.iter().skip(idx).collect::<Vec<_>>();
+        service::mark_notifications_as_done(&selected_notifications)
+            .await
+            .map_err(|err| format!("Failed to mark as done {}", err))?;
     }
     Ok(())
 }

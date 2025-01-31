@@ -88,6 +88,19 @@ pub async fn mark_notification_as_done(
     Ok(())
 }
 
+pub async fn mark_notifications_as_done(
+    notifs: &Vec<&DBNotification>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let connection = &mut establish_connection();
+    let ids = notifs.iter().map(|n| n.id.clone()).collect();
+    gh::mark_as_done_multiple(&ids).await?;
+    update(notifications)
+        .filter(id.eq_any(ids))
+        .set(done.eq(true))
+        .execute(connection)?;
+    Ok(())
+}
+
 pub async fn mark_notification_as_read(
     notification: &DBNotification,
 ) -> Result<(), Box<dyn std::error::Error>> {

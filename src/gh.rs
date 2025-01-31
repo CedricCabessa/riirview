@@ -358,6 +358,14 @@ pub async fn mark_as_done(id: &String) -> Result<(), Box<dyn std::error::Error>>
     Client::new()?.mark_notification_done(id).await
 }
 
+pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    iter(ids)
+        .map(mark_as_done)
+        .buffer_unordered(30)
+        .try_collect()
+        .await
+}
+
 pub async fn mark_as_read(id: &String) -> Result<(), Box<dyn std::error::Error>> {
     Client::new()?.mark_notification_read(id).await
 }
