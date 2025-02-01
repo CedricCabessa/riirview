@@ -4,12 +4,20 @@ use log::LevelFilter;
 use log::{debug, info};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
-use riirview::{service, tui};
+use riirview::tui;
 
 // TODO: auto refresh
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(tokio_main())?;
+    runtime.shutdown_background();
+    Ok(())
+}
+
+async fn tokio_main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv()?;
     let logfile = FileAppender::builder()
         .encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new(
@@ -30,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("info");
     debug!("debug");
 
-    tui::run(&mut service::get_notifications().await?).await?;
+    tui::run().await?;
 
     Ok(())
 }

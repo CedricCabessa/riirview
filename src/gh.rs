@@ -355,7 +355,8 @@ pub async fn fetch_prs(
 }
 
 pub async fn mark_as_done(id: &String) -> Result<(), Box<dyn std::error::Error>> {
-    Client::new()?.mark_notification_done(id).await
+    let client = Client::new()?;
+    client.mark_notification_done(id).await
 }
 
 pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
@@ -367,7 +368,8 @@ pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<(), Box<dyn std:
 }
 
 pub async fn mark_as_read(id: &String) -> Result<(), Box<dyn std::error::Error>> {
-    Client::new()?.mark_notification_read(id).await
+    let client = Client::new()?;
+    client.mark_notification_read(id).await
 }
 
 pub async fn need_update(

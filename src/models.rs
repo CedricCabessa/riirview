@@ -1,7 +1,7 @@
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 
-#[derive(Queryable, Selectable, Insertable, Identifiable, AsChangeset, Debug)]
+#[derive(Queryable, Selectable, Insertable, Identifiable, AsChangeset, Debug, Clone)]
 #[diesel(table_name = crate::schema::notifications)]
 pub struct Notification {
     pub id: String,
