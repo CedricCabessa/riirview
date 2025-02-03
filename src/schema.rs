@@ -17,5 +17,6 @@ diesel::table! {
         pr_draft -> Bool,
         pr_merged -> Bool,
         pr_author -> Text,
+        score_boost -> Integer,
     }
 }

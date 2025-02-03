@@ -5,6 +5,7 @@ use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::update;
+use diesel::upsert::excluded;
 use log::{debug, error, info};
 use schema::notifications::dsl::*;
 
@@ -42,6 +43,7 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
             pr_draft: pr.is_some_and(|pr| pr.draft),
             pr_merged: pr.is_some_and(|pr| pr.merged),
             pr_author: pr.map_or(String::new(), |pr| pr.user.login.clone()),
+            score_boost: 0,
         };
         let computed_score = scorer.score(&db_notification);
         db_notification.score = computed_score;
@@ -55,7 +57,11 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
             .values(&db_notification)
             .on_conflict(id)
             .do_update()
-            .set(&db_notification)
+            .set((
+                &db_notification,
+                score_boost.eq(excluded(score_boost)),
+                done.eq(false),
+            ))
             .execute(connection);
         if res.is_err() {
             error!(
@@ -73,7 +79,7 @@ pub async fn get_notifications() -> Result<Vec<DBNotification>, Box<dyn std::err
     Ok(notifications
         .select(DBNotification::as_select())
         .filter(done.eq(false))
-        .order_by((score.desc(), updated_at.desc()))
+        .order_by(((score + score_boost).desc(), updated_at.desc()))
         .load(connection)?)
 }
 
@@ -118,7 +124,7 @@ pub async fn update_score(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let connection = &mut establish_connection();
     update(notification)
-        .set(score.eq(notification.score + modifier))
+        .set(score_boost.eq(notification.score_boost + modifier))
         .execute(connection)?;
     Ok(())
 }

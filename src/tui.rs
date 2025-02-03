@@ -337,7 +337,7 @@ impl From<&Notification> for Text<'_> {
         };
         let txt = format!(
             "{score:>3} {icon} {time:<15} {author:15} {repo:<30} {title}",
-            score = notification.score,
+            score = notification.score + notification.score_boost,
             icon = icon,
             time = ellipsis(
                 &HumanTime::from(notification.updated_at.and_utc()).to_string(),
