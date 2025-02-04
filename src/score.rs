@@ -1,8 +1,10 @@
 use crate::models::Notification;
+use core::fmt;
 use log::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 #[derive(PartialEq, Eq, Debug)]
@@ -50,7 +52,7 @@ pub struct Scorer {
 }
 
 impl Scorer {
-    pub fn new(toml_path: PathBuf) -> Result<Scorer, Box<dyn std::error::Error>> {
+    pub fn new(toml_path: PathBuf) -> Result<Scorer, Error> {
         let config = fs::read_to_string(toml_path)?;
 
         //let value = config.parse::<HashMap<String, Rule>>();
@@ -86,7 +88,7 @@ fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
         "participating" => Ok(RuleType::Participating),
         "repo" => Ok(RuleType::Repo),
         "title" => Ok(RuleType::Title),
-        _ => Err(format!("Unknown rule name: {}", rule_name)),
+        _ => Err(rule_name.into()),
     }
 }
 
@@ -106,6 +108,42 @@ fn rule_title(notification: &Notification, params: &[String]) -> bool {
     params.iter().any(|p| notification.title.contains(p))
 }
 
+#[derive(Debug)]
+pub enum Error {
+    RuleFileNotFound,
+    InvalidToml,
+    InvalidRule(String),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::RuleFileNotFound => write!(f, "Rule file not found"),
+            Error::InvalidToml => write!(f, "Invalid toml file"),
+            Error::InvalidRule(msg) => write!(f, "Rule found: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<io::Error> for Error {
+    fn from(_: io::Error) -> Self {
+        Error::RuleFileNotFound
+    }
+}
+impl From<toml::de::Error> for Error {
+    fn from(_: toml::de::Error) -> Self {
+        Error::InvalidToml
+    }
+}
+
+impl From<String> for Error {
+    fn from(err: String) -> Self {
+        Error::InvalidRule(err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -116,7 +154,7 @@ mod tests {
     #[test]
     fn test_scorer_builder() {
         let path = "tests/rules.toml";
-        let scorer = Scorer::new(path).unwrap();
+        let scorer = Scorer::new(path.into()).unwrap();
 
         assert_eq!(scorer.rules.len(), 4);
         let display_names: HashSet<String> = scorer.rules.iter().map(|r| r.name.clone()).collect();
@@ -144,7 +182,7 @@ mod tests {
     #[test]
     fn test_scorer_score() {
         let path = "tests/rules.toml";
-        let scorer = Scorer::new(path).unwrap();
+        let scorer = Scorer::new(path.into()).unwrap();
 
         let db_notification = Notification {
             id: "1".to_string(),
@@ -164,6 +202,7 @@ mod tests {
             pr_draft: false,
             pr_merged: false,
             pr_author: "JohnDoe".into(),
+            score_boost: 0,
         };
 
         assert_eq!(scorer.score(&db_notification), 105);

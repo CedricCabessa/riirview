@@ -1,4 +1,5 @@
 use crate::models::Notification;
+use crate::score::Error as ScoreError;
 use crate::service;
 use chrono_humanize::HumanTime;
 use futures::TryFutureExt;
@@ -286,10 +287,28 @@ async fn mark_as_read(notification: &Notification) -> Result<(), String> {
 
 async fn sync() -> Result<(), String> {
     service::sync().await.map_err(|err| {
-        error!("{}", err);
-        "cannot sync"
-    })?;
-    Ok(())
+        // FIXME: try anyhow
+        let specific_error = err.downcast_ref::<ScoreError>();
+        if let Some(score_error) = specific_error {
+            match score_error {
+                ScoreError::RuleFileNotFound => {
+                    error!("rule file not found");
+                    "rule file not found".into()
+                }
+                ScoreError::InvalidToml => {
+                    error!("invalid toml");
+                    "invalid toml".into()
+                }
+                ScoreError::InvalidRule(msg) => {
+                    error!("invalid rule {:?}", msg);
+                    format!("invalid rule {:?}", msg)
+                }
+            }
+        } else {
+            error!("{}", err);
+            "cannot sync".into()
+        }
+    })
 }
 
 async fn refresh() -> Result<Vec<Notification>, String> {
