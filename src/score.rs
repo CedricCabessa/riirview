@@ -3,6 +3,7 @@ use log::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::path::PathBuf;
 
 #[derive(PartialEq, Eq, Debug)]
 enum RuleType {
@@ -49,7 +50,7 @@ pub struct Scorer {
 }
 
 impl Scorer {
-    pub fn new(toml_path: &str) -> Result<Scorer, Box<dyn std::error::Error>> {
+    pub fn new(toml_path: PathBuf) -> Result<Scorer, Box<dyn std::error::Error>> {
         let config = fs::read_to_string(toml_path)?;
 
         //let value = config.parse::<HashMap<String, Rule>>();

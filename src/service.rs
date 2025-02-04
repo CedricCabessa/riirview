@@ -1,3 +1,4 @@
+use crate::dirs;
 use crate::models::Notification as DBNotification;
 use crate::score::Scorer;
 use crate::*;
@@ -22,8 +23,8 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
     let gh_notifications = gh::fetch_notifications(last_update).await?;
     let gh_prs = gh::fetch_prs(&gh_notifications).await?;
 
-    // TODO: put the file in xdg compliant folder
-    let scorer = Scorer::new("rules.toml")?;
+    let directories = dirs::Directories::new();
+    let scorer = Scorer::new(directories.config.join("rules.toml"))?;
 
     info!("inserting {} notifications", gh_notifications.len());
     for gh_notification in gh_notifications {
