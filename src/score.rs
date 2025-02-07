@@ -151,6 +151,29 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
+    fn create_notification() -> Notification {
+        Notification {
+            id: "1".to_string(),
+            title: "title".into(),
+            url: "http://exemple.com".into(),
+            type_: "PullRequest".into(),
+            repo: "torvalds/linux".into(),
+            unread: true,
+            updated_at: NaiveDateTime::new(
+                NaiveDate::from_ymd_opt(2025, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
+            ),
+            done: false,
+            score: 0,
+            pr_state: "open".into(),
+            pr_number: 1,
+            pr_draft: false,
+            pr_merged: false,
+            pr_author: "JohnDoe".into(),
+            score_boost: 0,
+        }
+    }
+
     #[test]
     fn test_scorer_builder() {
         let path = "tests/rules.toml";
@@ -184,27 +207,28 @@ mod tests {
         let path = "tests/rules.toml";
         let scorer = Scorer::new(path.into()).unwrap();
 
-        let db_notification = Notification {
-            id: "1".to_string(),
-            title: "title".into(),
-            url: "http://exemple.com".into(),
-            type_: "PullRequest".into(),
-            repo: "torvalds/linux".into(),
-            unread: true,
-            updated_at: NaiveDateTime::new(
-                NaiveDate::from_ymd_opt(2025, 1, 1).unwrap(),
-                NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
-            ),
-            done: false,
-            score: 0,
-            pr_state: "open".into(),
-            pr_number: 1,
-            pr_draft: false,
-            pr_merged: false,
-            pr_author: "JohnDoe".into(),
-            score_boost: 0,
-        };
+        let db_notification = create_notification();
 
         assert_eq!(scorer.score(&db_notification), 105);
+    }
+
+    #[test]
+    fn test_scorer_title() {
+        let notification = create_notification();
+
+        assert_eq!(
+            rule_title(
+                &notification,
+                &vec!["bad title".into(), "title".into(), "another title".into()]
+            ),
+            true
+        );
+        assert_eq!(
+            rule_title(
+                &notification,
+                &vec!["bad title".into(), "another title".into()]
+            ),
+            false
+        );
     }
 }
