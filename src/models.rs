@@ -21,3 +21,9 @@ pub struct Notification {
     pub pr_merged: bool,
     pub pr_author: String,
 }
+
+impl Notification {
+    pub fn org(&self) -> String {
+        self.repo.split('/').next().unwrap().to_string()
+    }
+}

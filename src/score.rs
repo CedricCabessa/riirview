@@ -13,6 +13,7 @@ enum RuleType {
     Participating,
     Repo,
     Title,
+    Org,
 }
 
 #[derive(Deserialize, Debug)]
@@ -37,6 +38,7 @@ impl Rule {
             RuleType::Participating => rule_participating,
             RuleType::Repo => rule_repo,
             RuleType::Title => rule_title,
+            RuleType::Org => rule_org,
         };
         if fct(notification, &self.params) {
             debug!("{} match {}", notification.title, self.name);
@@ -88,6 +90,7 @@ fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
         "participating" => Ok(RuleType::Participating),
         "repo" => Ok(RuleType::Repo),
         "title" => Ok(RuleType::Title),
+        "org" => Ok(RuleType::Org),
         _ => Err(rule_name.into()),
     }
 }
@@ -106,6 +109,13 @@ fn rule_repo(notification: &Notification, params: &[String]) -> bool {
 
 fn rule_title(notification: &Notification, params: &[String]) -> bool {
     params.iter().any(|p| notification.title.contains(p))
+}
+
+fn rule_org(notification: &Notification, params: &[String]) -> bool {
+    params.iter().any(|param| {
+        let neg = param.starts_with("!");
+        (notification.org() == *param) != neg
+    })
 }
 
 #[derive(Debug)]
@@ -230,5 +240,14 @@ mod tests {
             ),
             false
         );
+    }
+
+    #[test]
+    fn test_scorer_org() {
+        let notification = create_notification();
+
+        assert_eq!(rule_org(&notification, &vec!["torvalds".into()]), true);
+        assert_eq!(rule_org(&notification, &vec!["!rms".into()]), true);
+        assert_eq!(rule_org(&notification, &vec!["deraadt".into()]), false)
     }
 }

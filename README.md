@@ -65,6 +65,18 @@ Note: this rule works only for Pull Request notification.
 
 `rule="title"` match if one of the comma-separated `param` is in the notification title.
 
+### org
+`rule="org"` each comma-separated `param` can be optionally prefixed by a `!`
+
+For each param,
+  If no `!` is present the rule matches if the notification organization matches the param
+  If `!`is present the rule matches if the notification organization doesn't match the param
+
+Eg: if you are flooded by corporate notifications related to the `cogip` orga, `params="!cogip"` will
+boost all non-work related notifications. Or you can pay attention to all PR from the whole rust
+foundation with `params="rust-lang"`
+
+
 ## Keymap
 
 | key               | action                                     |
