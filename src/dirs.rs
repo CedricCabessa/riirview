@@ -1,7 +1,7 @@
+use anyhow::{Context, Result};
+use directories::ProjectDirs;
 use std::fs;
 use std::path::PathBuf;
-
-use directories::ProjectDirs;
 
 pub struct Directories {
     pub data: PathBuf,
@@ -19,10 +19,10 @@ impl Directories {
         }
     }
 
-    pub fn create(&self) -> Result<(), Box<dyn std::error::Error>> {
-        fs::create_dir_all(&self.data)?;
-        fs::create_dir_all(&self.cache)?;
-        fs::create_dir_all(&self.config)?;
+    pub fn create(&self) -> Result<()> {
+        fs::create_dir_all(&self.data).context(format!("{}", self.data.display()))?;
+        fs::create_dir_all(&self.cache).context(format!("{}", self.cache.display()))?;
+        fs::create_dir_all(&self.config).context(format!("{}", self.config.display()))?;
         Ok(())
     }
 }

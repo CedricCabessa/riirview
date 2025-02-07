@@ -2,6 +2,7 @@ use crate::dirs;
 use crate::models::Notification as DBNotification;
 use crate::score::Scorer;
 use crate::*;
+use anyhow::Result;
 use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
@@ -10,13 +11,13 @@ use diesel::upsert::excluded;
 use log::{debug, error, info};
 use schema::notifications::dsl::*;
 
-pub async fn need_update() -> Result<bool, Box<dyn std::error::Error>> {
+pub async fn need_update() -> Result<bool> {
     let connection = &mut establish_connection();
     let last_update = get_recent_update(connection);
     gh::need_update(last_update).await
 }
 
-pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn sync() -> Result<()> {
     let connection = &mut establish_connection();
     let last_update = get_recent_update(connection);
 
@@ -75,7 +76,7 @@ pub async fn sync() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub async fn get_notifications() -> Result<Vec<DBNotification>, Box<dyn std::error::Error>> {
+pub async fn get_notifications() -> Result<Vec<DBNotification>> {
     let connection = &mut establish_connection();
     Ok(notifications
         .select(DBNotification::as_select())
@@ -84,9 +85,7 @@ pub async fn get_notifications() -> Result<Vec<DBNotification>, Box<dyn std::err
         .load(connection)?)
 }
 
-pub async fn mark_notification_as_done(
-    notification: &DBNotification,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn mark_notification_as_done(notification: &DBNotification) -> Result<()> {
     let connection = &mut establish_connection();
     gh::mark_as_done(&notification.id).await?;
     update(notification)
@@ -95,9 +94,7 @@ pub async fn mark_notification_as_done(
     Ok(())
 }
 
-pub async fn mark_notifications_as_done(
-    notifs: &Vec<&DBNotification>,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn mark_notifications_as_done(notifs: &Vec<&DBNotification>) -> Result<()> {
     let connection = &mut establish_connection();
     let ids = notifs.iter().map(|n| n.id.clone()).collect();
     gh::mark_as_done_multiple(&ids).await?;
@@ -108,9 +105,7 @@ pub async fn mark_notifications_as_done(
     Ok(())
 }
 
-pub async fn mark_notification_as_read(
-    notification: &DBNotification,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn mark_notification_as_read(notification: &DBNotification) -> Result<()> {
     let connection = &mut establish_connection();
     gh::mark_as_read(&notification.id).await?;
     update(notification)
@@ -119,10 +114,7 @@ pub async fn mark_notification_as_read(
     Ok(())
 }
 
-pub async fn update_score(
-    notification: &DBNotification,
-    modifier: i32,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn update_score(notification: &DBNotification, modifier: i32) -> Result<()> {
     let connection = &mut establish_connection();
     update(notification)
         .set(score_boost.eq(notification.score_boost + modifier))

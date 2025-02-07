@@ -1,3 +1,6 @@
+use anyhow::anyhow;
+use anyhow::Context;
+use anyhow::Result;
 use chrono::{NaiveDateTime, Utc};
 use futures::stream::iter;
 use futures::StreamExt;
@@ -114,9 +117,9 @@ struct Client {
 }
 
 impl Client {
-    pub fn new() -> Result<Client, Box<dyn std::error::Error>> {
+    pub fn new() -> Result<Client> {
         let client = reqwest::Client::new();
-        let token = dotenvy::var("GH_TOKEN")?;
+        let token = dotenvy::var("GH_TOKEN").context("GH_TOKEN env variable is missing")?;
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "reqwest".parse().unwrap());
         headers.insert("Accept", "application/vnd.github+json".parse().unwrap());
@@ -132,10 +135,7 @@ impl Client {
         })
     }
 
-    pub async fn get_notifications(
-        &self,
-        last_update: Option<NaiveDateTime>,
-    ) -> Result<Response, Box<dyn std::error::Error>> {
+    pub async fn get_notifications(&self, last_update: Option<NaiveDateTime>) -> Result<Response> {
         let url = match last_update {
             Some(last_update) => {
                 let since = last_update
@@ -153,28 +153,19 @@ impl Client {
         Ok(resp)
     }
 
-    pub async fn mark_notification_done(
-        &self,
-        id: &String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn mark_notification_done(&self, id: &String) -> Result<()> {
         let url = format!("{}/notifications/threads/{}", self.base_url, id);
         self.del(url).await?;
         Ok(())
     }
 
-    pub async fn mark_notification_read(
-        &self,
-        id: &String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn mark_notification_read(&self, id: &String) -> Result<()> {
         let url = format!("{}/notifications/threads/{}", self.base_url, id);
         self.patch(url).await?;
         Ok(())
     }
 
-    pub async fn need_update(
-        &self,
-        last_update: NaiveDateTime,
-    ) -> Result<Response, Box<dyn std::error::Error>> {
+    pub async fn need_update(&self, last_update: NaiveDateTime) -> Result<Response> {
         let url = format!("{}/notifications", self.base_url);
         let mut custom_headers = HeaderMap::new();
         let since = last_update
@@ -186,7 +177,7 @@ impl Client {
         self.head(url, Some(custom_headers)).await
     }
 
-    pub async fn get(&self, url: String) -> Result<Response, Box<dyn std::error::Error>> {
+    pub async fn get(&self, url: String) -> Result<Response> {
         debug!("GET {}", &url);
         let resp = self
             .client
@@ -198,7 +189,7 @@ impl Client {
         Ok(resp.error_for_status()?)
     }
 
-    async fn del(&self, url: String) -> Result<Response, Box<dyn std::error::Error>> {
+    async fn del(&self, url: String) -> Result<Response> {
         debug!("DEL {}", &url);
         let resp = self
             .client
@@ -210,7 +201,7 @@ impl Client {
         Ok(resp.error_for_status()?)
     }
 
-    async fn patch(&self, url: String) -> Result<Response, Box<dyn std::error::Error>> {
+    async fn patch(&self, url: String) -> Result<Response> {
         debug!("PATCH {}", &url);
         let resp = self
             .client
@@ -222,11 +213,7 @@ impl Client {
         Ok(resp.error_for_status()?)
     }
 
-    async fn head(
-        &self,
-        url: String,
-        headers: Option<HeaderMap>,
-    ) -> Result<Response, Box<dyn std::error::Error>> {
+    async fn head(&self, url: String, headers: Option<HeaderMap>) -> Result<Response> {
         debug!("HEAD {} {:?}", &url, headers);
         let builder = self.client.head(url).headers(self.headers.clone());
 
@@ -243,12 +230,12 @@ impl Client {
     }
 }
 
-fn url_to_page(url: &str) -> Result<u32, Box<dyn std::error::Error>> {
+fn url_to_page(url: &str) -> Result<u32> {
     let url = Url::parse(url)?;
     let page = url
         .query_pairs()
         .find(|(key, _)| key == "page")
-        .ok_or("no page")?
+        .ok_or(anyhow!("no page"))?
         .1
         .into_owned()
         .parse()?;
@@ -256,13 +243,13 @@ fn url_to_page(url: &str) -> Result<u32, Box<dyn std::error::Error>> {
     Ok(page)
 }
 
-fn pages_from_link(link: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+fn pages_from_link(link: &str) -> Result<Vec<String>> {
     let regex = Regex::new(r#"<(.*)>; rel="next", <(.*)>; rel="last""#);
 
     let matches = regex?.captures(link);
     if let Some(matches) = matches {
-        let next = matches.get(1).ok_or("link parse error")?.as_str();
-        let last = matches.get(2).ok_or("link parse error")?.as_str();
+        let next = matches.get(1).ok_or(anyhow!("link parse error"))?.as_str();
+        let last = matches.get(2).ok_or(anyhow!("link parse error"))?.as_str();
         // choose "next" as base url, then change "page" query param
         let url = Url::parse(next)?;
 
@@ -286,25 +273,23 @@ fn pages_from_link(link: &str) -> Result<Vec<String>, Box<dyn std::error::Error>
         }
         Ok(urls)
     } else {
-        Err("invalid link format".into())
+        Err(anyhow!("invalid link format"))
     }
 }
 
-async fn get_notifications(url: String) -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
+async fn get_notifications(url: String) -> Result<Vec<Notification>> {
     let client = Client::new()?;
     let resp = client.get(url).await?;
     Ok(resp.json::<Vec<Notification>>().await?)
 }
 
-async fn get_pr(url: String) -> Result<PullRequest, Box<dyn std::error::Error>> {
+async fn get_pr(url: String) -> Result<PullRequest> {
     let client = Client::new()?;
     let resp = client.get(url).await?;
     Ok(resp.json::<PullRequest>().await?)
 }
 
-pub async fn fetch_notifications(
-    last_update: Option<NaiveDateTime>,
-) -> Result<Vec<Notification>, Box<dyn std::error::Error>> {
+pub async fn fetch_notifications(last_update: Option<NaiveDateTime>) -> Result<Vec<Notification>> {
     let client = Client::new()?;
     let resp = client.get_notifications(last_update).await?;
 
@@ -330,9 +315,7 @@ pub async fn fetch_notifications(
     Ok(repos)
 }
 
-pub async fn fetch_prs(
-    notifications: &[Notification],
-) -> Result<Vec<PullRequest>, Box<dyn std::error::Error>> {
+pub async fn fetch_prs(notifications: &[Notification]) -> Result<Vec<PullRequest>> {
     let urls: Vec<String> = notifications
         .iter()
         .filter_map(|notif| {
@@ -354,12 +337,12 @@ pub async fn fetch_prs(
         .await
 }
 
-pub async fn mark_as_done(id: &String) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn mark_as_done(id: &String) -> Result<()> {
     let client = Client::new()?;
     client.mark_notification_done(id).await
 }
 
-pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<()> {
     iter(ids)
         .map(mark_as_done)
         .buffer_unordered(30)
@@ -367,14 +350,12 @@ pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<(), Box<dyn std:
         .await
 }
 
-pub async fn mark_as_read(id: &String) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn mark_as_read(id: &String) -> Result<()> {
     let client = Client::new()?;
     client.mark_notification_read(id).await
 }
 
-pub async fn need_update(
-    last_update: Option<NaiveDateTime>,
-) -> Result<bool, Box<dyn std::error::Error>> {
+pub async fn need_update(last_update: Option<NaiveDateTime>) -> Result<bool> {
     if let Some(last_update) = last_update {
         let client = Client::new()?;
         let resp = client.need_update(last_update).await?;
@@ -433,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parser() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_parser() -> Result<()> {
         use chrono::naive::{NaiveDate, NaiveTime};
         use serde_json;
         use std::fs::File;

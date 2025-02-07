@@ -9,7 +9,7 @@ pub mod tui;
 use diesel::prelude::*;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
-use log::info;
+use log::debug;
 use std::env;
 
 pub fn establish_connection() -> SqliteConnection {
@@ -23,7 +23,7 @@ pub fn establish_connection() -> SqliteConnection {
             db_path.to_str().unwrap().into()
         }
     };
-    info!("Connecting to {}", database_url);
+    debug!("Connecting to {}", database_url);
     SqliteConnection::establish(&database_url)
         .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }

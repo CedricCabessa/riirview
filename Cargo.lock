@@ -1474,6 +1474,7 @@ dependencies = [
 name = "riirview"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "chrono-humanize",
  "diesel",

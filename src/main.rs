@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anyhow::{Context, Result};
 use log::LevelFilter;
 use log::{debug, info};
 use log4rs::append::file::FileAppender;
@@ -8,7 +9,7 @@ use riirview::{dirs, establish_connection, run_db_migrations, tui};
 
 // TODO: auto refresh
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -17,14 +18,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn tokio_main() -> Result<(), Box<dyn std::error::Error>> {
+async fn tokio_main() -> Result<()> {
     dotenvy::dotenv()?;
 
     let directories = dirs::Directories::new();
-    if let Err(err) = directories.create() {
-        eprintln!("Error creating directories: {}", err);
-        return Err(err);
-    };
+    directories.create().context("Error creating directories")?;
 
     let logfile = FileAppender::builder()
         .encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new(
@@ -58,7 +56,5 @@ async fn tokio_main() -> Result<(), Box<dyn std::error::Error>> {
 
     run_db_migrations(&mut establish_connection());
 
-    tui::run().await?;
-
-    Ok(())
+    tui::run().await
 }

@@ -1,8 +1,8 @@
 use crate::models::Notification;
 use crate::score::Error as ScoreError;
 use crate::service;
+use anyhow::Result;
 use chrono_humanize::HumanTime;
-use futures::TryFutureExt;
 use log::{debug, error};
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::style::{Modifier, Style};
@@ -44,7 +44,13 @@ enum MessageUi {
     Redraw,
 }
 
-pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run() -> Result<()> {
+    let res = _run().await;
+    ratatui::restore();
+    res
+}
+
+async fn _run() -> Result<()> {
     let mut terminal = ratatui::init();
     let mut list_state = ListState::default();
     list_state.select_first();
@@ -97,7 +103,6 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    ratatui::restore();
     Ok(())
 }
 
@@ -193,7 +198,7 @@ async fn update_ui(
     terminal: &mut DefaultTerminal,
     list_state: &mut ListState,
     notifications: &Vec<Notification>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     let (info, err) = match message {
         MessageUi::MoveUp(mov) => {
             list_state.scroll_up_by(mov);
@@ -246,7 +251,10 @@ async fn open_gh(idx: Option<usize>, notifications: &[Notification]) -> Result<(
                     mark_as_read(notification).await?;
                     Ok(())
                 }
-                Err(e) => Err(format!("Failed to open browser: {}", e)),
+                Err(e) => {
+                    error!("{e}");
+                    Err(format!("Failed to open browser: {}", e))
+                }
             };
         }
     }
@@ -258,7 +266,10 @@ async fn mark_as_done(idx: Option<usize>, notifications: &[Notification]) -> Res
         if let Some(notification) = notifications.get(idx) {
             return match service::mark_notification_as_done(notification).await {
                 Ok(_) => Ok(()),
-                Err(e) => Err(format!("Failed to mark as done {}", e)),
+                Err(e) => {
+                    error!("{e}");
+                    Err(format!("Failed to mark as done {}", e))
+                }
             };
         }
     }
@@ -271,57 +282,56 @@ async fn mark_all_below_as_done(
 ) -> Result<(), String> {
     if let Some(idx) = idx {
         let selected_notifications = notifications.iter().skip(idx).collect::<Vec<_>>();
-        service::mark_notifications_as_done(&selected_notifications)
-            .await
-            .map_err(|err| format!("Failed to mark as done {}", err))?;
+        return match service::mark_notifications_as_done(&selected_notifications).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("{e}");
+                Err(format!("Failed to mark as done {}", e))
+            }
+        };
     }
     Ok(())
 }
 
 async fn mark_as_read(notification: &Notification) -> Result<(), String> {
     match service::mark_notification_as_read(notification).await {
-        Err(e) => Err(format!("Failed to mark as read: {}", e)),
+        Err(e) => {
+            error!("{e}");
+            Err(format!("Failed to mark as read: {}", e))
+        }
         Ok(_) => Ok(()),
     }
 }
 
 async fn sync() -> Result<(), String> {
-    service::sync().await.map_err(|err| {
-        // FIXME: try anyhow
-        let specific_error = err.downcast_ref::<ScoreError>();
-        if let Some(score_error) = specific_error {
-            match score_error {
-                ScoreError::RuleFileNotFound => {
-                    error!("rule file not found");
-                    "rule file not found".into()
-                }
-                ScoreError::InvalidToml => {
-                    error!("invalid toml");
-                    "invalid toml".into()
-                }
-                ScoreError::InvalidRule(msg) => {
-                    error!("invalid rule {:?}", msg);
-                    format!("invalid rule {:?}", msg)
-                }
-            }
-        } else {
-            error!("{}", err);
-            "cannot sync".into()
-        }
-    })
-}
-
-async fn refresh() -> Result<Vec<Notification>, String> {
-    service::get_notifications()
-        .map_err(|_| "cannot get notifications".into())
+    service::sync()
         .await
+        .map_err(|err| match err.downcast_ref::<ScoreError>() {
+            Some(ScoreError::RuleFileNotFound) => {
+                error!("rule file not found");
+                "rule file not found".into()
+            }
+            Some(ScoreError::InvalidToml) => {
+                error!("invalid toml");
+                "invalid toml".into()
+            }
+            Some(ScoreError::InvalidRule(msg)) => {
+                error!("invalid rule {:?}", msg);
+                format!("invalid rule {:?}", msg)
+            }
+            None => {
+                error!("{}", err);
+                "cannot sync".into()
+            }
+        })
 }
 
-async fn need_update() -> Result<bool, String> {
-    service::need_update().await.map_err(|err| {
-        error!("need update {:?}", err);
-        "cannot ask for update".into()
-    })
+async fn refresh() -> Result<Vec<Notification>> {
+    service::get_notifications().await
+}
+
+async fn need_update() -> Result<bool> {
+    service::need_update().await
 }
 
 async fn update_score(
@@ -331,12 +341,13 @@ async fn update_score(
 ) -> Result<(), String> {
     if let Some(idx) = idx {
         if let Some(notification) = notifications.get(idx) {
-            return service::update_score(notification, modifier)
-                .await
-                .map_err(|err| {
+            return match service::update_score(notification, modifier).await {
+                Ok(_) => Ok(()),
+                Err(err) => {
                     error!("error in score update {:?}", err);
-                    "cannot update score".into()
-                });
+                    Err("cannot update score".into())
+                }
+            };
         }
     }
     Ok(())
