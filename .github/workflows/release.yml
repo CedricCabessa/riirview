@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: "*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        # old ubuntu to have compatible libc. Should try static build
+        os: [ubuntu-22.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release
+      - name: OS name
+        run: |
+          echo os_name=$(echo ${{ runner.os }} | tr A-Z a-z) >> ${GITHUB_ENV}
+      - name: Rename
+        run: |
+          mv target/release/riirview riirview-${{ env.os_name }}
+      - name: Archive binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: riirview-${{ env.os_name }}
+          path: riirview-${{ env.os_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Extract changelog
+        run: |
+          awk '/^# / { if (version_block) { exit } version_block = 1; next } version_block' CHANGELOG.md > gh_changelog
+      - name: Download linux build
+        uses: actions/download-artifact@v4
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: riirview-*/*
+          body_path: gh_changelog
