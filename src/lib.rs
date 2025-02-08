@@ -8,15 +8,11 @@ pub mod tui;
 
 use diesel::prelude::*;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use dotenvy::dotenv;
 use log::debug;
-use std::env;
 
 pub fn establish_connection() -> SqliteConnection {
-    dotenv().ok();
-
     let directories = dirs::Directories::new();
-    let database_url = match env::var("DATABASE_URL") {
+    let database_url = match dotenvy::var("DATABASE_URL") {
         Ok(val) => val,
         Err(_) => {
             let db_path = directories.data.join("riirview.db");

@@ -19,7 +19,7 @@ fn main() -> Result<()> {
 }
 
 async fn tokio_main() -> Result<()> {
-    dotenvy::dotenv()?;
+    _ = dotenvy::dotenv();
 
     let directories = dirs::Directories::new();
     directories.create().context("Error creating directories")?;
