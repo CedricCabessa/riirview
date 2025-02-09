@@ -8,6 +8,7 @@ use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::update;
 use diesel::upsert::excluded;
+use gh::NotificationType;
 use log::{debug, error, info};
 use schema::notifications::dsl::*;
 
@@ -22,30 +23,89 @@ pub async fn sync() -> Result<()> {
     let last_update = get_recent_update(connection);
 
     let gh_notifications = gh::fetch_notifications(last_update).await?;
+    // TODO: spawn tasks
     let gh_prs = gh::fetch_prs(&gh_notifications).await?;
-
+    let gh_releases = gh::fetch_releases(&gh_notifications).await?;
+    let gh_issues = gh::fetch_issues(&gh_notifications).await?;
     let directories = dirs::Directories::new();
     let scorer = Scorer::new(directories.config.join("rules.toml"))?;
 
     info!("inserting {} notifications", gh_notifications.len());
     for gh_notification in gh_notifications {
-        let pr = gh_prs.iter().find(|pr| pr.url == gh_notification.pr_url());
+        let pr_number_ = 0;
+        let (url_, pr_state_, pr_draft_, pr_merged_, pr_author_) =
+            match gh_notification.subject.r#type {
+                NotificationType::PullRequest => {
+                    let pr = gh_prs.iter().find(|pr| {
+                        pr.url
+                            == *gh_notification
+                                .subject
+                                .url
+                                .as_ref()
+                                .unwrap_or(&String::default())
+                    });
+
+                    (
+                        pr.map_or(String::new(), |pr| pr.html_url.clone()),
+                        pr.map_or(String::new(), |pr| pr.state.clone()),
+                        pr.is_some_and(|pr| pr.draft),
+                        pr.is_some_and(|pr| pr.merged),
+                        pr.map_or(String::new(), |pr| pr.user.login.clone()),
+                    )
+                }
+                NotificationType::Release => {
+                    let release = gh_releases.iter().find(|release| {
+                        release.url
+                            == *gh_notification
+                                .subject
+                                .url
+                                .as_ref()
+                                .unwrap_or(&String::default())
+                    });
+                    (
+                        release.map_or(String::new(), |release| release.html_url.clone()),
+                        "".into(),
+                        false,
+                        false,
+                        release.map_or(String::new(), |release| release.author.login.clone()),
+                    )
+                }
+                NotificationType::Issue => {
+                    let issue = gh_issues.iter().find(|issue| {
+                        issue.url
+                            == *gh_notification
+                                .subject
+                                .url
+                                .as_ref()
+                                .unwrap_or(&String::default())
+                    });
+                    (
+                        issue.map_or(String::new(), |issue| issue.html_url.clone()),
+                        String::new(),
+                        false,
+                        issue.is_some_and(|issue| issue.state == "closed"),
+                        issue.map_or(String::new(), |release| release.user.login.clone()),
+                    )
+                }
+            };
+
         let mut db_notification = DBNotification {
-            id: gh_notification.id().to_owned(),
-            title: gh_notification.title().to_owned(),
-            url: gh_notification.url().to_owned(),
-            type_: gh_notification.r#type().to_owned(),
-            repo: gh_notification.repo().to_owned(),
-            unread: gh_notification.unread(),
-            updated_at: gh_notification.updated_at(),
+            id: gh_notification.id,
+            title: gh_notification.subject.title,
+            type_: format!("{:?}", gh_notification.subject.r#type), // FIXME: use Display
+            repo: gh_notification.repository.full_name,
+            unread: gh_notification.unread,
+            updated_at: gh_notification.updated_at,
             done: false,
             score: -1,
-            pr_state: pr.map_or(String::new(), |pr| pr.state.clone()),
-            pr_number: pr.map_or(-1, |pr| pr.number),
-            pr_draft: pr.is_some_and(|pr| pr.draft),
-            pr_merged: pr.is_some_and(|pr| pr.merged),
-            pr_author: pr.map_or(String::new(), |pr| pr.user.login.clone()),
             score_boost: 0,
+            url: url_,
+            // TODO rename those fields
+            pr_state: pr_state_,
+            pr_number: pr_number_,
+            pr_draft: pr_draft_,
+            pr_merged: pr_merged_,
+            pr_author: pr_author_,
         };
         let computed_score = scorer.score(&db_notification);
         db_notification.score = computed_score;

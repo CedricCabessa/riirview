@@ -15,12 +15,12 @@ use url::Url;
 
 #[derive(Deserialize, Debug)]
 pub struct Notification {
-    id: String,
-    unread: bool,
+    pub id: String,
+    pub unread: bool,
     #[serde(with = "my_date_format")]
-    updated_at: NaiveDateTime,
-    subject: Subject,
-    repository: Repository,
+    pub updated_at: NaiveDateTime,
+    pub subject: Subject,
+    pub repository: Repository,
 }
 
 mod my_date_format {
@@ -39,65 +39,29 @@ mod my_date_format {
     }
 }
 
+#[derive(Deserialize, Debug, PartialEq)]
+pub enum NotificationType {
+    PullRequest,
+    Release,
+    Issue,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Subject {
-    title: String,
-    url: Option<String>,
-    r#type: String,
+    pub title: String,
+    pub url: Option<String>,
+    pub r#type: NotificationType,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Repository {
-    full_name: String,
-}
-
-impl Notification {
-    pub fn id(&self) -> &String {
-        &self.id
-    }
-
-    pub fn title(&self) -> &String {
-        &self.subject.title
-    }
-
-    pub fn url(&self) -> String {
-        if let Some(api_url) = &self.subject.url {
-            // https://api.github.com/repos/LedgerHQ/<repo>/pulls/N
-            let num = api_url.split('/').last().unwrap();
-
-            format!(
-                "https://github.com/{}/pull/{}",
-                self.repository.full_name, num
-            )
-        } else {
-            "".to_string()
-        }
-    }
-
-    pub fn pr_url(&self) -> String {
-        self.subject.url.clone().unwrap_or_default()
-    }
-
-    pub fn repo(&self) -> &String {
-        &self.repository.full_name
-    }
-
-    pub fn r#type(&self) -> &String {
-        &self.subject.r#type
-    }
-
-    pub fn updated_at(&self) -> NaiveDateTime {
-        self.updated_at
-    }
-
-    pub fn unread(&self) -> bool {
-        self.unread
-    }
+    pub full_name: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct PullRequest {
     pub url: String,
+    pub html_url: String,
     pub state: String, // TODO enum?
     pub number: i32,
     pub draft: bool,
@@ -108,6 +72,21 @@ pub struct PullRequest {
 #[derive(Deserialize, Debug)]
 pub struct User {
     pub login: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Release {
+    pub url: String,
+    pub html_url: String,
+    pub author: User,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Issue {
+    pub url: String,
+    pub html_url: String,
+    pub user: User,
+    pub state: String,
 }
 
 struct Client {
@@ -289,6 +268,18 @@ async fn get_pr(url: String) -> Result<PullRequest> {
     Ok(resp.json::<PullRequest>().await?)
 }
 
+async fn get_release(url: String) -> Result<Release> {
+    let client = Client::new()?;
+    let resp = client.get(url).await?;
+    Ok(resp.json::<Release>().await?)
+}
+
+async fn get_issue(url: String) -> Result<Issue> {
+    let client = Client::new()?;
+    let resp = client.get(url).await?;
+    Ok(resp.json::<Issue>().await?)
+}
+
 pub async fn fetch_notifications(last_update: Option<NaiveDateTime>) -> Result<Vec<Notification>> {
     let client = Client::new()?;
     let resp = client.get_notifications(last_update).await?;
@@ -319,7 +310,7 @@ pub async fn fetch_prs(notifications: &[Notification]) -> Result<Vec<PullRequest
     let urls: Vec<String> = notifications
         .iter()
         .filter_map(|notif| {
-            if notif.subject.r#type == "PullRequest" {
+            if notif.subject.r#type == NotificationType::PullRequest {
                 notif.subject.url.clone()
             } else {
                 None
@@ -329,6 +320,50 @@ pub async fn fetch_prs(notifications: &[Notification]) -> Result<Vec<PullRequest
 
     iter(urls)
         .map(get_pr)
+        .buffer_unordered(30)
+        .try_fold(vec![], |mut acc, x| async {
+            acc.push(x);
+            Ok(acc)
+        })
+        .await
+}
+
+pub async fn fetch_releases(notifications: &[Notification]) -> Result<Vec<Release>> {
+    let urls: Vec<String> = notifications
+        .iter()
+        .filter_map(|notif| {
+            if notif.subject.r#type == NotificationType::Release {
+                notif.subject.url.clone()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    iter(urls)
+        .map(get_release)
+        .buffer_unordered(30)
+        .try_fold(vec![], |mut acc, x| async {
+            acc.push(x);
+            Ok(acc)
+        })
+        .await
+}
+
+pub async fn fetch_issues(notifications: &[Notification]) -> Result<Vec<Issue>> {
+    let urls: Vec<String> = notifications
+        .iter()
+        .filter_map(|notif| {
+            if notif.subject.r#type == NotificationType::Issue {
+                notif.subject.url.clone()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    iter(urls)
+        .map(get_issue)
         .buffer_unordered(30)
         .try_fold(vec![], |mut acc, x| async {
             acc.push(x);
