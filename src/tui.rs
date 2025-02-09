@@ -1,4 +1,4 @@
-use crate::models::Notification;
+use crate::models::{Notification, NotificationState, NotificationType};
 use crate::score::Error as ScoreError;
 use crate::service;
 use anyhow::Result;
@@ -174,7 +174,6 @@ fn handle_input(tx: mpsc::Sender<Message>) {
     }
 
     if let Ok(Event::Key(key)) = event {
-        debug!("input {key:?}");
         let message = match key.code {
             KeyCode::Down => Message::Ui(MessageUi::MoveDown(1)),
             KeyCode::PageDown => Message::Ui(MessageUi::MoveDown(10)),
@@ -355,15 +354,15 @@ async fn update_score(
 
 impl From<&Notification> for Text<'_> {
     fn from(notification: &Notification) -> Self {
-        let icon = match notification.type_.as_ref() {
-            "Issue" => "🐛",
-            "Release" => "🚢",
-            "PullRequest" => match (notification.pr_draft, notification.pr_merged) {
-                (true, _) => "📝",
-                (false, true) => "📪",
-                (false, false) => "📬",
+        let icon = match notification.type_ {
+            NotificationType::Issue => "🐛",
+            NotificationType::Release => "🚢",
+            NotificationType::PullRequest => match notification.state {
+                NotificationState::Open => "📬",
+                NotificationState::Resolved => "📪",
+                NotificationState::Canceled => "❌",
+                NotificationState::Draft => "📝",
             },
-            _ => "❓",
         };
         let txt = format!(
             "{score:>3} {icon} {time:<15} {author:15} {repo:<30} {title}",
@@ -373,7 +372,7 @@ impl From<&Notification> for Text<'_> {
                 &HumanTime::from(notification.updated_at.and_utc()).to_string(),
                 15
             ),
-            author = ellipsis(&notification.pr_author, 15),
+            author = ellipsis(&notification.author, 15),
             repo = ellipsis(&notification.repo, 30),
             title = ellipsis(&notification.title, 80),
         );

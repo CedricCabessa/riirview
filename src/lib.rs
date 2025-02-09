@@ -8,7 +8,6 @@ pub mod tui;
 
 use diesel::prelude::*;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use log::debug;
 
 pub fn establish_connection() -> SqliteConnection {
     let directories = dirs::Directories::new();
@@ -19,7 +18,6 @@ pub fn establish_connection() -> SqliteConnection {
             db_path.to_str().unwrap().into()
         }
     };
-    debug!("Connecting to {}", database_url);
     SqliteConnection::establish(&database_url)
         .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }

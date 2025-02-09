@@ -1,1 +1,0 @@
-ALTER TABLE notifications ADD COLUMN score_boost INTEGER DEFAULT 0 NOT NULL;

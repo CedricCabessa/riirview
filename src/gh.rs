@@ -5,7 +5,7 @@ use chrono::{NaiveDateTime, Utc};
 use futures::stream::iter;
 use futures::StreamExt;
 use futures::TryStreamExt;
-use log::debug;
+use log::{debug, info};
 use regex::Regex;
 use reqwest::header::HeaderMap;
 use reqwest::Response;
@@ -44,6 +44,8 @@ pub enum NotificationType {
     PullRequest,
     Release,
     Issue,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Deserialize, Debug)]
@@ -62,7 +64,7 @@ pub struct Repository {
 pub struct PullRequest {
     pub url: String,
     pub html_url: String,
-    pub state: String, // TODO enum?
+    pub state: String,
     pub number: i32,
     pub draft: bool,
     pub merged: bool,
@@ -157,7 +159,7 @@ impl Client {
     }
 
     pub async fn get(&self, url: String) -> Result<Response> {
-        debug!("GET {}", &url);
+        info!("GET {}", &url);
         let resp = self
             .client
             .get(url)
@@ -169,7 +171,7 @@ impl Client {
     }
 
     async fn del(&self, url: String) -> Result<Response> {
-        debug!("DEL {}", &url);
+        info!("DEL {}", &url);
         let resp = self
             .client
             .delete(url)
@@ -181,7 +183,7 @@ impl Client {
     }
 
     async fn patch(&self, url: String) -> Result<Response> {
-        debug!("PATCH {}", &url);
+        info!("PATCH {}", &url);
         let resp = self
             .client
             .patch(url)
@@ -193,7 +195,7 @@ impl Client {
     }
 
     async fn head(&self, url: String, headers: Option<HeaderMap>) -> Result<Response> {
-        debug!("HEAD {} {:?}", &url, headers);
+        info!("HEAD {} {:?}", &url, headers);
         let builder = self.client.head(url).headers(self.headers.clone());
 
         let builder = if let Some(custom_header) = headers {

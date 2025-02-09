@@ -4,7 +4,12 @@ CREATE TABLE notifications (
   repo VARCHAR NOT NULL,
   url VARCHAR NOT NULL,
   type VARCHAR NOT NULL,
+  state VARCHAR NOT NULL,
+  author VARCHAR NOT NULL,
   updated_at TIMESTAMP NOT NULL,
   unread BOOLEAN NOT NULL,
-  done BOOLEAN NOT NULL
+  done BOOLEAN NOT NULL,
+  score INTEGER NOT NULL,
+  score_boost INTEGER NOT NULL
 );
+-- Your SQL goes here

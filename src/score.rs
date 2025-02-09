@@ -96,7 +96,7 @@ fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
 }
 
 fn rule_author(notification: &Notification, params: &[String]) -> bool {
-    params.contains(&notification.pr_author)
+    params.contains(&notification.author)
 }
 
 fn rule_participating(_notification: &Notification, _params: &[String]) -> bool {
@@ -158,6 +158,9 @@ impl From<String> for Error {
 mod tests {
     use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
+    use crate::models::NotificationState;
+    use crate::models::NotificationType;
+
     use super::*;
     use std::collections::HashSet;
 
@@ -166,7 +169,7 @@ mod tests {
             id: "1".to_string(),
             title: "title".into(),
             url: "http://exemple.com".into(),
-            type_: "PullRequest".into(),
+            type_: NotificationType::PullRequest,
             repo: "torvalds/linux".into(),
             unread: true,
             updated_at: NaiveDateTime::new(
@@ -175,11 +178,8 @@ mod tests {
             ),
             done: false,
             score: 0,
-            pr_state: "open".into(),
-            pr_number: 1,
-            pr_draft: false,
-            pr_merged: false,
-            pr_author: "JohnDoe".into(),
+            state: NotificationState::Open,
+            author: "JohnDoe".into(),
             score_boost: 0,
         }
     }
