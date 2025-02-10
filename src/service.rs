@@ -51,12 +51,14 @@ pub async fn sync() -> Result<()> {
                     pr.html_url.clone(),
                     models::NotificationType::PullRequest,
                     pr.user.login.clone(),
-                    if pr.draft {
+                    if pr.state.as_ref() as &str == "closed" {
+                        if pr.merged {
+                            NotificationState::Resolved
+                        } else {
+                            NotificationState::Canceled
+                        }
+                    } else if pr.draft {
                         NotificationState::Draft
-                    } else if pr.merged {
-                        NotificationState::Resolved
-                    } else if pr.state.as_ref() as &str == "closed" {
-                        NotificationState::Canceled
                     } else {
                         NotificationState::Open
                     },

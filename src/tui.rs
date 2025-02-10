@@ -78,7 +78,6 @@ async fn _run() -> Result<()> {
         #[rustfmt::skip]
         select! {
             maybe_message = rx.recv() => {
-		debug!("receive msg {maybe_message:?}");
 		if let Some(message) = maybe_message {
 		    match message {
 			Message::Action(action) => {
