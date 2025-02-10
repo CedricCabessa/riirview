@@ -1,6 +1,6 @@
 use crate::models::Notification;
 use core::fmt;
-use log::debug;
+use log::{debug, info};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -41,7 +41,10 @@ impl Rule {
             RuleType::Org => rule_org,
         };
         if fct(notification, &self.params) {
-            debug!("{} match {}", notification.title, self.name);
+            info!(
+                "{} match {} score:{}",
+                notification.title, self.name, self.score
+            );
             self.score
         } else {
             0

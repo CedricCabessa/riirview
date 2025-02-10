@@ -162,11 +162,11 @@ impl Client {
         info!("GET {}", &url);
         let resp = self
             .client
-            .get(url)
+            .get(&url)
             .headers(self.headers.clone())
             .send()
             .await?;
-        debug!("status {}", resp.status());
+        debug!("status {} for {}", resp.status(), &url);
         Ok(resp.error_for_status()?)
     }
 
@@ -174,11 +174,11 @@ impl Client {
         info!("DEL {}", &url);
         let resp = self
             .client
-            .delete(url)
+            .delete(&url)
             .headers(self.headers.clone())
             .send()
             .await?;
-        debug!("status {}", resp.status());
+        debug!("status {} for {}", resp.status(), &url);
         Ok(resp.error_for_status()?)
     }
 
@@ -186,17 +186,17 @@ impl Client {
         info!("PATCH {}", &url);
         let resp = self
             .client
-            .patch(url)
+            .patch(&url)
             .headers(self.headers.clone())
             .send()
             .await?;
-        debug!("status {}", resp.status());
+        debug!("status {} for {}", resp.status(), &url);
         Ok(resp.error_for_status()?)
     }
 
     async fn head(&self, url: String, headers: Option<HeaderMap>) -> Result<Response> {
         info!("HEAD {} {:?}", &url, headers);
-        let builder = self.client.head(url).headers(self.headers.clone());
+        let builder = self.client.head(&url).headers(self.headers.clone());
 
         let builder = if let Some(custom_header) = headers {
             builder.headers(custom_header)
@@ -205,7 +205,7 @@ impl Client {
         };
         let resp = builder.send().await?;
 
-        debug!("status {}", resp.status());
+        debug!("status {} for {}", resp.status(), &url);
 
         Ok(resp.error_for_status()?)
     }
