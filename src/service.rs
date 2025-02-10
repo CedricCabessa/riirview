@@ -24,10 +24,14 @@ pub async fn sync() -> Result<()> {
     let last_update = get_recent_update(connection);
 
     let gh_notifications = gh::fetch_notifications(last_update).await?;
-    // TODO: spawn tasks
-    let gh_prs = gh::fetch_prs(&gh_notifications).await?;
-    let gh_releases = gh::fetch_releases(&gh_notifications).await?;
-    let gh_issues = gh::fetch_issues(&gh_notifications).await?;
+
+    let (gh_prs, gh_releases, gh_issues) = tokio::join!(
+        gh::fetch_prs(&gh_notifications),
+        gh::fetch_releases(&gh_notifications),
+        gh::fetch_issues(&gh_notifications)
+    );
+    let (gh_prs, gh_releases, gh_issues) = (gh_prs?, gh_releases?, gh_issues?);
+
     let directories = dirs::Directories::new();
     let scorer = Scorer::new(directories.config.join("rules.toml"))?;
 
