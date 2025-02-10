@@ -114,6 +114,15 @@ fn rule_title(notification: &Notification, params: &[String]) -> bool {
 fn rule_org(notification: &Notification, params: &[String]) -> bool {
     params.iter().any(|param| {
         let neg = param.starts_with("!");
+        let param = if neg {
+            if let Some(param) = param.get(1..) {
+                param
+            } else {
+                return false;
+            }
+        } else {
+            param
+        };
         (notification.org() == *param) != neg
     })
 }
@@ -247,6 +256,7 @@ mod tests {
         let notification = create_notification();
 
         assert_eq!(rule_org(&notification, &vec!["torvalds".into()]), true);
+        assert_eq!(rule_org(&notification, &vec!["!torvalds".into()]), false);
         assert_eq!(rule_org(&notification, &vec!["!rms".into()]), true);
         assert_eq!(rule_org(&notification, &vec!["deraadt".into()]), false)
     }
