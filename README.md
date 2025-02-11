@@ -21,6 +21,8 @@ Moving down, all notifications below a certain point are probably good to trash.
 
 Rules are defined in `rules.toml`
 
+On linux, create the file as `~/.config/riirview/rules.toml`
+
 Here is an example
 
 ```toml
@@ -91,6 +93,21 @@ foundation with `params="rust-lang"`
 | R                 | mark all notifications under cusor as done |
 | q                 | quit                                       |
 
+## Files
+
+Riirview respect XDG directory specification.
+
+Here is where we store data (on linux)
+
+ * Rule file: `~/.config/riirview/rules.toml`
+ * Logs: `~/.cache/riirview/riirview.log`
+ * Sqlite db `~/.local/share/riirview/riirview.db`
+
+For other OS, see [here](https://github.com/dirs-dev/directories-rs?tab=readme-ov-file#projectdirs)
+
+## Environment variables
+
+ * `RUST_LOG`: manage log level: `debug`, `info` (default), `error`
 
 ## FAQ
 
