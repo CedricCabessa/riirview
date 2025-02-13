@@ -43,7 +43,7 @@ score=5
 
 ```
 
-Rules are named by an arbitrary name define per section, eg `my_fav_repos`
+Rules are named by an arbitrary name defined per section, eg `my_fav_repos`
 
 `rule` define the rule that will be used, see section below.
 
@@ -71,8 +71,9 @@ Note: this rule works only for Pull Request notification.
 `rule="org"` each comma-separated `param` can be optionally prefixed by a `!`
 
 For each param,
-  If no `!` is present the rule matches if the notification organization matches the param
-  If `!`is present the rule matches if the notification organization doesn't match the param
+  If no `!` is present the rule matches if the notification organization matches the param.
+
+  If `!`is present the rule matches if the notification organization doesn't match the param.
 
 Eg: if you are flooded by corporate notifications related to the `cogip` orga, `params="!cogip"` will
 boost all non-work related notifications. Or you can pay attention to all PR from the whole rust
