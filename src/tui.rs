@@ -2,7 +2,7 @@ use crate::models::{Notification, NotificationState, NotificationType};
 use crate::score::Error as ScoreError;
 use crate::service;
 use anyhow::Result;
-use chrono_humanize::HumanTime;
+use chrono_humanize::{Accuracy, HumanTime, Tense};
 use log::{debug, error};
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::style::{Modifier, Style};
@@ -363,14 +363,13 @@ impl From<&Notification> for Text<'_> {
                 NotificationState::Draft => "📝",
             },
         };
+        let time = HumanTime::from(notification.updated_at.and_utc())
+            .to_text_en(Accuracy::Rough, Tense::Past);
         let txt = format!(
             "{score:>3} {icon} {time:<15} {author:15} {repo:<30} {title}",
             score = notification.score + notification.score_boost,
             icon = icon,
-            time = ellipsis(
-                &HumanTime::from(notification.updated_at.and_utc()).to_string(),
-                15
-            ),
+            time = ellipsis(&time, 15),
             author = ellipsis(&notification.author, 15),
             repo = ellipsis(&notification.repo, 30),
             title = ellipsis(&notification.title, 80),
