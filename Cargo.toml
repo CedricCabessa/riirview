@@ -2,6 +2,7 @@
 name = "riirview"
 version = "1.0.0"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 anyhow = "1.0.95"
@@ -25,3 +26,6 @@ url = "2.5.4"
 
 [dev-dependencies]
 serde_json = "1.0.138"
+
+[build-dependencies]
+vergen-git2 = "1.0.5"

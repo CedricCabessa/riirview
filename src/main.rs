@@ -8,11 +8,15 @@ use log4rs::config::{Appender, Config, Root};
 use riirview::{dirs, establish_connection, run_db_migrations, tui};
 
 fn main() -> Result<()> {
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?;
-    runtime.block_on(tokio_main())?;
-    runtime.shutdown_background();
+    if std::env::args().nth(1) == Some("--version".into()) {
+        println!("riirview {}", env!("VERGEN_GIT_DESCRIBE"));
+    } else {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        runtime.block_on(tokio_main())?;
+        runtime.shutdown_background();
+    }
     Ok(())
 }
 
