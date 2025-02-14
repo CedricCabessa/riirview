@@ -7,8 +7,6 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use riirview::{dirs, establish_connection, run_db_migrations, tui};
 
-// TODO: auto refresh
-
 fn main() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

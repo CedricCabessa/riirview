@@ -3,7 +3,7 @@ use crate::score::Error as ScoreError;
 use crate::service;
 use anyhow::Result;
 use chrono_humanize::{Accuracy, HumanTime, Tense};
-use log::{debug, error};
+use log::{debug, error, info};
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::*;
@@ -14,7 +14,7 @@ use ratatui::{
     widgets::List,
     DefaultTerminal,
 };
-use tokio::{select, sync::mpsc};
+use tokio::sync::mpsc;
 
 use ratatui::Frame;
 
@@ -33,6 +33,7 @@ enum MessageAction {
     MarkAsDone,
     MarkBelowAsDone,
     Sync,
+    SyncBackground,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -43,6 +44,9 @@ enum MessageUi {
     Info(String),
     Redraw,
 }
+
+const REFRESH_DELAY_SEC: u64 = 300;
+const REDRAW_DELAY_SEC: u64 = 60;
 
 pub async fn run() -> Result<()> {
     let res = _run().await;
@@ -55,10 +59,6 @@ async fn _run() -> Result<()> {
     let mut list_state = ListState::default();
     list_state.select_first();
 
-    let mut info = String::new();
-    if need_update().await? {
-        info = "New notifications available, press 'g' to update".to_string();
-    }
     let (tx, mut rx) = mpsc::channel::<Message>(32);
 
     let notifications = refresh().await?;
@@ -68,39 +68,45 @@ async fn _run() -> Result<()> {
             &notifications,
             &mut list_state,
             &String::new(),
-            &info,
+            &String::new(),
         )
     })?;
 
+    let tx_cloned = tx.clone();
+    let notif_handle = tokio::spawn(refresh_notifs_loop(tx.clone()));
+    let refresh_handle = tokio::spawn(refresh_ui_loop(tx.clone()));
+    std::thread::spawn(|| handle_input_loop(tx_cloned));
+
     loop {
-        let tx_cloned1 = tx.clone();
-        let tx_cloned2 = tx.clone();
-        #[rustfmt::skip]
-        select! {
-            maybe_message = rx.recv() => {
-		if let Some(message) = maybe_message {
-		    match message {
-			Message::Action(action) => {
-			    if action == MessageAction::Quit {
-				break
-			    }
-			    let message_action = action.clone();
-			    let notifications = refresh().await?;
-			    tokio::spawn(handle_action(tx_cloned1, message_action, list_state.selected(), notifications));
-			},
-			Message::Ui(ui) => {
-			    // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
-			    // it should be done only after a change in the list
-			    let notifications = refresh().await?;
-			    update_ui(ui, &mut terminal, &mut list_state, &notifications).await?;
-			},
-			Message::Noop => {}
-		    }
-		}
+        let maybe_message = rx.recv().await;
+        if let Some(message) = maybe_message {
+            match message {
+                Message::Action(action) => {
+                    if action == MessageAction::Quit {
+                        break;
+                    }
+                    let message_action = action.clone();
+                    let notifications = refresh().await?;
+                    tokio::spawn(handle_action(
+                        tx.clone(),
+                        message_action,
+                        list_state.selected(),
+                        notifications,
+                    ));
+                }
+                Message::Ui(ui) => {
+                    // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
+                    // it should be done only after a change in the list
+                    let notifications = refresh().await?;
+                    update_ui(ui, &mut terminal, &mut list_state, &notifications).await?;
+                }
+                Message::Noop => {}
             }
-            _ = tokio::task::spawn_blocking(|| handle_input(tx_cloned2)) => {}
         }
     }
+
+    notif_handle.abort();
+    refresh_handle.abort();
 
     Ok(())
 }
@@ -156,6 +162,7 @@ async fn handle_action(
                 .expect("cannot send");
             res
         }
+        MessageAction::SyncBackground => sync().await,
         MessageAction::Quit => Ok(()), // handled in loop break
     };
 
@@ -164,30 +171,65 @@ async fn handle_action(
     }
 }
 
-fn handle_input(tx: mpsc::Sender<Message>) {
-    let event = event::read();
-    if let Err(err) = event {
-        tx.blocking_send(Message::Ui(MessageUi::Error(err.to_string())))
-            .expect("cannot send");
-        return;
-    }
+fn handle_input_loop(tx: mpsc::Sender<Message>) {
+    loop {
+        let event = event::read();
+        if let Err(err) = event {
+            tx.blocking_send(Message::Ui(MessageUi::Error(err.to_string())))
+                .expect("cannot send");
+            return;
+        }
 
-    if let Ok(Event::Key(key)) = event {
-        let message = match key.code {
-            KeyCode::Down => Message::Ui(MessageUi::MoveDown(1)),
-            KeyCode::PageDown => Message::Ui(MessageUi::MoveDown(10)),
-            KeyCode::Up => Message::Ui(MessageUi::MoveUp(1)),
-            KeyCode::PageUp => Message::Ui(MessageUi::MoveUp(10)),
-            KeyCode::Char('q') => Message::Action(MessageAction::Quit),
-            KeyCode::Char('+') => Message::Action(MessageAction::ScoreIncrement(10)),
-            KeyCode::Char('-') => Message::Action(MessageAction::ScoreIncrement(-10)),
-            KeyCode::Enter => Message::Action(MessageAction::Open),
-            KeyCode::Char('r') => Message::Action(MessageAction::MarkAsDone),
-            KeyCode::Char('R') => Message::Action(MessageAction::MarkBelowAsDone),
-            KeyCode::Char('g') => Message::Action(MessageAction::Sync),
-            _ => Message::Noop,
+        if let Ok(Event::Key(key)) = event {
+            let message = match key.code {
+                KeyCode::Down => Message::Ui(MessageUi::MoveDown(1)),
+                KeyCode::PageDown => Message::Ui(MessageUi::MoveDown(10)),
+                KeyCode::Up => Message::Ui(MessageUi::MoveUp(1)),
+                KeyCode::PageUp => Message::Ui(MessageUi::MoveUp(10)),
+                KeyCode::Char('q') => Message::Action(MessageAction::Quit),
+                KeyCode::Char('+') => Message::Action(MessageAction::ScoreIncrement(10)),
+                KeyCode::Char('-') => Message::Action(MessageAction::ScoreIncrement(-10)),
+                KeyCode::Enter => Message::Action(MessageAction::Open),
+                KeyCode::Char('r') => Message::Action(MessageAction::MarkAsDone),
+                KeyCode::Char('R') => Message::Action(MessageAction::MarkBelowAsDone),
+                KeyCode::Char('g') => Message::Action(MessageAction::Sync),
+                _ => Message::Noop,
+            };
+            tx.blocking_send(message).expect("cannot send message");
+        }
+    }
+}
+
+async fn refresh_notifs_loop(tx: mpsc::Sender<Message>) {
+    loop {
+        debug!("refreshing notifications");
+        let (refresh_delay, need_update) = match service::check_update_and_limit().await {
+            Err(_) => (REFRESH_DELAY_SEC, true),
+            Ok(update_status) => {
+                debug!("gh status {update_status:?}");
+                (
+                    std::cmp::max(REFRESH_DELAY_SEC, update_status.poll_interval),
+                    update_status.need_update,
+                )
+            }
         };
-        tx.blocking_send(message).expect("cannot send message");
+
+        info!("need_update: {need_update}, sleeping for: {refresh_delay} sec");
+        if need_update {
+            tx.send(Message::Action(MessageAction::SyncBackground))
+                .await
+                .expect("cannot send");
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(refresh_delay)).await;
+    }
+}
+
+async fn refresh_ui_loop(tx: mpsc::Sender<Message>) {
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(REDRAW_DELAY_SEC)).await;
+        tx.send(Message::Ui(MessageUi::Redraw))
+            .await
+            .expect("cannot send");
     }
 }
 
@@ -326,10 +368,6 @@ async fn sync() -> Result<(), String> {
 
 async fn refresh() -> Result<Vec<Notification>> {
     service::get_notifications().await
-}
-
-async fn need_update() -> Result<bool> {
-    service::need_update().await
 }
 
 async fn update_score(

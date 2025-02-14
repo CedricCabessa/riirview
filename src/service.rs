@@ -9,14 +9,15 @@ use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::update;
 use diesel::upsert::excluded;
+use gh::UpdateStatus;
 use log::{debug, error, info};
 use models::NotificationState;
 use schema::notifications::dsl::*;
 
-pub async fn need_update() -> Result<bool> {
+pub async fn check_update_and_limit() -> Result<UpdateStatus> {
     let connection = &mut establish_connection();
-    let last_update = get_recent_update(connection);
-    gh::need_update(last_update).await
+    let last_update = get_recent_update(connection).ok_or(anyhow!("no recent update"))?;
+    gh::check_update_and_limit(last_update).await
 }
 
 pub async fn sync() -> Result<()> {

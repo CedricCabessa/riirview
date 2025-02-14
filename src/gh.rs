@@ -91,6 +91,15 @@ pub struct Issue {
     pub state: String,
 }
 
+#[derive(Debug)]
+pub struct UpdateStatus {
+    pub need_update: bool,
+    pub last_update: NaiveDateTime,
+    pub poll_interval: u64,
+    pub ratelimit_remaining: u64,
+    pub ratelimit_used: u64,
+}
+
 struct Client {
     base_url: String,
     headers: HeaderMap,
@@ -392,14 +401,33 @@ pub async fn mark_as_read(id: &String) -> Result<()> {
     client.mark_notification_read(id).await
 }
 
-pub async fn need_update(last_update: Option<NaiveDateTime>) -> Result<bool> {
-    if let Some(last_update) = last_update {
-        let client = Client::new()?;
-        let resp = client.need_update(last_update).await?;
-        Ok(resp.status() != StatusCode::NOT_MODIFIED)
-    } else {
-        Ok(true)
-    }
+pub async fn check_update_and_limit(last_update: NaiveDateTime) -> Result<UpdateStatus> {
+    let client = Client::new()?;
+    let resp = client.need_update(last_update).await?;
+    let headers = resp.headers();
+    let poll_interval = headers
+        .get("x-poll-interval")
+        .ok_or(anyhow!("no x-poll-interval header"))?
+        .to_str()?
+        .parse()?;
+    let ratelimit_remaining = headers
+        .get("x-ratelimit-remaining")
+        .ok_or(anyhow!("no x-ratelimit-remaining header"))?
+        .to_str()?
+        .parse()?;
+    let ratelimit_used = headers
+        .get("x-ratelimit-used")
+        .ok_or(anyhow!("no x-ratelimit-used header"))?
+        .to_str()?
+        .parse()?;
+
+    Ok(UpdateStatus {
+        need_update: resp.status() != StatusCode::NOT_MODIFIED,
+        last_update,
+        poll_interval,
+        ratelimit_remaining,
+        ratelimit_used,
+    })
 }
 
 #[cfg(test)]
