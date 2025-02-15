@@ -10,7 +10,6 @@ use std::path::PathBuf;
 #[derive(PartialEq, Eq, Debug)]
 enum RuleType {
     Author,
-    Participating,
     Repo,
     Title,
     Org,
@@ -35,7 +34,6 @@ impl Rule {
     pub fn matcher(&self, notification: &Notification) -> i32 {
         let fct = match self.rule {
             RuleType::Author => rule_author,
-            RuleType::Participating => rule_participating,
             RuleType::Repo => rule_repo,
             RuleType::Title => rule_title,
             RuleType::Org => rule_org,
@@ -90,7 +88,6 @@ impl Scorer {
 fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
     match rule_name {
         "author" => Ok(RuleType::Author),
-        "participating" => Ok(RuleType::Participating),
         "repo" => Ok(RuleType::Repo),
         "title" => Ok(RuleType::Title),
         "org" => Ok(RuleType::Org),
@@ -100,10 +97,6 @@ fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
 
 fn rule_author(notification: &Notification, params: &[String]) -> bool {
     params.contains(&notification.author)
-}
-
-fn rule_participating(_notification: &Notification, _params: &[String]) -> bool {
-    false
 }
 
 fn rule_repo(notification: &Notification, params: &[String]) -> bool {
@@ -201,16 +194,11 @@ mod tests {
         let path = "tests/rules.toml";
         let scorer = Scorer::new(path.into()).unwrap();
 
-        assert_eq!(scorer.rules.len(), 4);
+        assert_eq!(scorer.rules.len(), 3);
         let display_names: HashSet<String> = scorer.rules.iter().map(|r| r.name.clone()).collect();
         assert_eq!(
             display_names,
-            HashSet::from([
-                "me".into(),
-                "participating".into(),
-                "friends".into(),
-                "my_fav_repos".into(),
-            ])
+            HashSet::from(["me".into(), "friends".into(), "my_fav_repos".into(),])
         );
 
         let tl_rule = scorer

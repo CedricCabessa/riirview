@@ -3,11 +3,6 @@ rule="author"
 param="JohnDoe"
 score=100
 
-[participating]
-rule="participating"
-param="JohnDoe"
-score=100
-
 [friends]
 rule="author"
 param="torvalds@linux-foundation.org, rms@gnu.org"
