@@ -120,6 +120,7 @@ pub async fn sync() -> Result<()> {
         };
         let mut db_notification = DBNotification {
             id: gh_notification.id,
+            reason: gh_notification.reason,
             title: gh_notification.subject.title,
             repo: gh_notification.repository.full_name,
             unread: gh_notification.unread,

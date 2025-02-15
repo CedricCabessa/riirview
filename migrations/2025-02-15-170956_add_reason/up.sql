@@ -1,0 +1,1 @@
+ALTER TABLE notifications ADD COLUMN reason VARCHAR NOT NULL DEFAULT '';

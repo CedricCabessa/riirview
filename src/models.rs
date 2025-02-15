@@ -98,6 +98,7 @@ pub struct Notification {
     pub score_boost: i32,
     pub state: NotificationState,
     pub author: String,
+    pub reason: String,
 }
 
 impl Notification {

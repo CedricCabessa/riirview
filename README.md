@@ -79,6 +79,17 @@ Eg: if you are flooded by corporate notifications related to the `cogip` orga, `
 boost all non-work related notifications. Or you can pay attention to all PR from the whole rust
 foundation with `params="rust-lang"`
 
+### reason
+
+`rule="reason"` match if one of the comma-separated `param` is in the notification reason.
+
+See
+https://docs.github.com/en/rest/activity/notifications?apiVersion=2022-11-28#about-notification-reasons
+
+Eg:
+`param="approval_requested, assign, author, comment, manual, mention, review_requested"`
+
+We don't do any validity check on param.
 
 ## Keymap
 

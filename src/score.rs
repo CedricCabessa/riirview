@@ -13,6 +13,7 @@ enum RuleType {
     Repo,
     Title,
     Org,
+    Reason,
 }
 
 #[derive(Deserialize, Debug)]
@@ -37,6 +38,7 @@ impl Rule {
             RuleType::Repo => rule_repo,
             RuleType::Title => rule_title,
             RuleType::Org => rule_org,
+            RuleType::Reason => rule_reason,
         };
         if fct(notification, &self.params) {
             info!(
@@ -91,6 +93,7 @@ fn rule_from_str(rule_name: &str) -> Result<RuleType, String> {
         "repo" => Ok(RuleType::Repo),
         "title" => Ok(RuleType::Title),
         "org" => Ok(RuleType::Org),
+        "reason" => Ok(RuleType::Reason),
         _ => Err(rule_name.into()),
     }
 }
@@ -121,6 +124,10 @@ fn rule_org(notification: &Notification, params: &[String]) -> bool {
         };
         (notification.org() == *param) != neg
     })
+}
+
+fn rule_reason(notification: &Notification, params: &[String]) -> bool {
+    params.iter().any(|p| notification.reason.contains(p))
 }
 
 #[derive(Debug)]
@@ -172,6 +179,7 @@ mod tests {
     fn create_notification() -> Notification {
         Notification {
             id: "1".to_string(),
+            reason: "participating".to_string(),
             title: "title".into(),
             url: "http://exemple.com".into(),
             type_: NotificationType::PullRequest,
@@ -250,5 +258,22 @@ mod tests {
         assert_eq!(rule_org(&notification, &vec!["!torvalds".into()]), false);
         assert_eq!(rule_org(&notification, &vec!["!rms".into()]), true);
         assert_eq!(rule_org(&notification, &vec!["deraadt".into()]), false)
+    }
+
+    #[test]
+    fn test_scorer_reason() {
+        let notification = create_notification();
+
+        assert_eq!(
+            rule_reason(
+                &notification,
+                &vec!["comment".into(), "participating".into(), "mention".into()]
+            ),
+            true
+        );
+        assert_eq!(
+            rule_reason(&notification, &vec!["comment".into(), "mention".into()]),
+            false
+        );
     }
 }

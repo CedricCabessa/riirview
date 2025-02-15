@@ -17,6 +17,7 @@ use url::Url;
 pub struct Notification {
     pub id: String,
     pub unread: bool,
+    pub reason: String,
     #[serde(with = "my_date_format")]
     pub updated_at: NaiveDateTime,
     pub subject: Subject,

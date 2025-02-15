@@ -15,5 +15,6 @@ diesel::table! {
         done -> Bool,
         score -> Integer,
         score_boost -> Integer,
+        reason -> Text,
     }
 }
