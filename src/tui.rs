@@ -7,11 +7,11 @@ use log::{debug, error, info};
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::*;
-use ratatui::widgets::ListState;
+use ratatui::widgets::{ListState, Paragraph};
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Constraint, Flex, Layout, Rect},
     text::Line,
-    widgets::List,
+    widgets::{Block, Clear, List},
     DefaultTerminal,
 };
 use tokio::sync::mpsc;
@@ -34,6 +34,7 @@ enum MessageAction {
     MarkBelowAsDone,
     Sync,
     SyncBackground,
+    Explain,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -42,6 +43,7 @@ enum MessageUi {
     MoveDown(u16),
     Error(String),
     Info(String),
+    Popup(String),
     Redraw,
 }
 
@@ -55,10 +57,12 @@ pub async fn run() -> Result<()> {
 }
 
 #[derive(Default)]
-struct App {}
+struct App {
+    show_popup: bool,
+}
 
 impl App {
-    async fn run(&self) -> Result<()> {
+    async fn run(&mut self) -> Result<()> {
         let mut terminal = ratatui::init();
         let mut list_state = ListState::default();
         list_state.select_first();
@@ -66,15 +70,7 @@ impl App {
         let (tx, mut rx) = mpsc::channel::<Message>(32);
 
         let notifications = refresh().await?;
-        terminal.draw(|frame| {
-            self.draw(
-                frame,
-                &notifications,
-                &mut list_state,
-                &String::new(),
-                &String::new(),
-            )
-        })?;
+        terminal.draw(|frame| self.draw(frame, &notifications, &mut list_state, "", "", ""))?;
 
         let tx_cloned = tx.clone();
         let notif_handle = tokio::spawn(refresh_notifs_loop(tx.clone()));
@@ -84,13 +80,28 @@ impl App {
         loop {
             let maybe_message = rx.recv().await;
             if let Some(message) = maybe_message {
+                // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
+                // it should be done only after a change in the list
+                let notifications = refresh().await?;
+
+                if self.show_popup {
+                    self.show_popup = false;
+                    self.update_ui(
+                        MessageUi::Redraw,
+                        &mut terminal,
+                        &mut list_state,
+                        &notifications,
+                    )
+                    .await?;
+                    continue;
+                }
+
                 match message {
                     Message::Action(action) => {
                         if action == MessageAction::Quit {
                             break;
                         }
                         let message_action = action.clone();
-                        let notifications = refresh().await?;
                         tokio::spawn(handle_action(
                             tx.clone(),
                             message_action,
@@ -99,9 +110,6 @@ impl App {
                         ));
                     }
                     Message::Ui(ui) => {
-                        // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
-                        // it should be done only after a change in the list
-                        let notifications = refresh().await?;
                         self.update_ui(ui, &mut terminal, &mut list_state, &notifications)
                             .await?;
                     }
@@ -121,8 +129,9 @@ impl App {
         frame: &mut Frame,
         notifications: &Vec<Notification>,
         list_state: &mut ListState,
-        error: &String,
-        info: &String,
+        error: &str,
+        info: &str,
+        popup: &str,
     ) {
         let status = if error.is_empty() {
             if info.is_empty() {
@@ -141,30 +150,49 @@ impl App {
         frame.render_widget(title, one);
         let list = List::new(notifications).highlight_style(Modifier::REVERSED);
         frame.render_stateful_widget(list, two, list_state);
+        if self.show_popup {
+            let area = frame.area();
+            let lines: Vec<Line> = popup.split('\n').map(Line::from).collect();
+            let max_len = lines
+                .iter()
+                .max_by(|a, b| a.width().cmp(&b.width()))
+                .unwrap();
+            let height: u16 = (lines.len() + 3).try_into().unwrap();
+            let width: u16 = (max_len.width() + 3).try_into().unwrap();
+            let area = popup_area(area, height, width);
+            let paragraph = Paragraph::new(lines);
+            let block = Block::bordered().title("Explain");
+            frame.render_widget(Clear, area); //this clears out the background
+            frame.render_widget(paragraph.block(block), area);
+        }
     }
 
     async fn update_ui(
-        &self,
+        &mut self,
         message: MessageUi,
         terminal: &mut DefaultTerminal,
         list_state: &mut ListState,
         notifications: &Vec<Notification>,
     ) -> Result<()> {
-        let (info, err) = match message {
+        let (info, err, popup) = match message {
             MessageUi::MoveUp(mov) => {
                 list_state.scroll_up_by(mov);
-                (String::new(), String::new())
+                (String::new(), String::new(), String::new())
             }
             MessageUi::MoveDown(mov) => {
                 list_state.scroll_down_by(mov);
-                (String::new(), String::new())
+                (String::new(), String::new(), String::new())
             }
-            MessageUi::Error(err) => (String::new(), err),
-            MessageUi::Info(info) => (info, String::new()),
-            MessageUi::Redraw => (String::new(), String::new()),
+            MessageUi::Error(err) => (String::new(), err, String::new()),
+            MessageUi::Info(info) => (info, String::new(), String::new()),
+            MessageUi::Redraw => (String::new(), String::new(), String::new()),
+            MessageUi::Popup(popup) => {
+                self.show_popup = true;
+                (String::new(), String::new(), popup)
+            }
         };
 
-        terminal.draw(|frame| self.draw(frame, notifications, list_state, &err, &info))?;
+        terminal.draw(|frame| self.draw(frame, notifications, list_state, &err, &info, &popup))?;
         Ok(())
     }
 }
@@ -221,6 +249,15 @@ async fn handle_action(
             res
         }
         MessageAction::SyncBackground => sync().await,
+        MessageAction::Explain => match explain(idx, &notifications).await {
+            Ok(explanation) => {
+                tx.send(Message::Ui(MessageUi::Popup(explanation)))
+                    .await
+                    .expect("cannot send");
+                Ok(())
+            }
+            Err(e) => Err(e),
+        },
         MessageAction::Quit => Ok(()), // handled in loop break
     };
 
@@ -251,8 +288,11 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
                 KeyCode::Char('r') => Message::Action(MessageAction::MarkAsDone),
                 KeyCode::Char('R') => Message::Action(MessageAction::MarkBelowAsDone),
                 KeyCode::Char('g') => Message::Action(MessageAction::Sync),
+                KeyCode::Char('x') => Message::Action(MessageAction::Explain),
                 _ => Message::Noop,
             };
+
+            // send message, it will be executed if popup is inactive
             tx.blocking_send(message).expect("cannot send message");
         }
     }
@@ -289,6 +329,14 @@ async fn refresh_ui_loop(tx: mpsc::Sender<Message>) {
             .await
             .expect("cannot send");
     }
+}
+
+fn popup_area(area: Rect, lines: u16, columns: u16) -> Rect {
+    let vertical = Layout::vertical([Constraint::Length(lines)]).flex(Flex::Center);
+    let horizontal = Layout::horizontal([Constraint::Length(columns)]).flex(Flex::Center);
+    let [area] = vertical.areas(area);
+    let [area] = horizontal.areas(area);
+    area
 }
 
 async fn open_gh(idx: Option<usize>, notifications: &[Notification]) -> Result<(), String> {
@@ -395,6 +443,30 @@ async fn update_score(
         }
     }
     Ok(())
+}
+
+async fn explain(idx: Option<usize>, notifications: &[Notification]) -> Result<String, String> {
+    if let Some(idx) = idx {
+        if let Some(notification) = notifications.get(idx) {
+            let res = service::explain(notification)
+                .await
+                .or(Err(String::from("explain failed")))?;
+            if res.is_empty() {
+                return Ok("\nThis notification doesn't match any rule".to_string());
+            } else {
+                let explanation = res.iter().fold(String::new(), |acc, rule| {
+                    format!("{acc}\nrule:{} score:{}", rule.name, rule.score)
+                });
+                let explanation = if notification.score_boost != 0 {
+                    format!("{explanation}\n\nmanual boost:{}", notification.score_boost)
+                } else {
+                    explanation
+                };
+                return Ok(explanation);
+            }
+        }
+    }
+    Ok(String::new())
 }
 
 impl From<&Notification> for Text<'_> {

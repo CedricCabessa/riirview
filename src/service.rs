@@ -1,6 +1,6 @@
 use crate::dirs;
 use crate::models::Notification as DBNotification;
-use crate::score::Scorer;
+use crate::score::{Rule, Scorer};
 use crate::*;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -206,6 +206,13 @@ pub async fn update_score(notification: &DBNotification, modifier: i32) -> Resul
         .set(score_boost.eq(notification.score_boost + modifier))
         .execute(connection)?;
     Ok(())
+}
+
+pub async fn explain(notification: &DBNotification) -> Result<Vec<Rule>> {
+    let directories = dirs::Directories::new();
+    let scorer = Scorer::new(directories.config.join("rules.toml"))?;
+    let rules = scorer.explain(notification);
+    Ok(rules)
 }
 
 fn get_recent_update(connection: &mut SqliteConnection) -> Option<NaiveDateTime> {

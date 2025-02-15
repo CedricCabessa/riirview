@@ -103,7 +103,12 @@ We don't do any validity check on param.
 | enter             | open github page                           |
 | r                 | mark notification as done                  |
 | R                 | mark all notifications below cusor as done |
+| x                 | explain scoring (see below)                |
 | q                 | quit                                       |
+
+Note on "explain scoring": display rules matching this notification. Rules are recomputed on demand,
+if you have changed your rule file, the result might not match the score in db.
+
 
 ## Files
 

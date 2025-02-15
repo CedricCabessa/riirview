@@ -7,7 +7,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 enum RuleType {
     Author,
     Repo,
@@ -23,12 +23,12 @@ struct TomlRule {
     score: i32,
 }
 
-#[derive(Debug)]
-struct Rule {
+#[derive(Debug, Clone)]
+pub struct Rule {
     rule: RuleType,
-    name: String,
+    pub name: String,
     params: Vec<String>,
-    score: i32,
+    pub score: i32,
 }
 
 impl Rule {
@@ -84,6 +84,14 @@ impl Scorer {
         self.rules
             .iter()
             .fold(0, |acc, rule| acc + rule.matcher(notification))
+    }
+
+    pub fn explain(&self, notification: &Notification) -> Vec<Rule> {
+        self.rules
+            .iter()
+            .filter(|rule| rule.matcher(notification) != 0)
+            .cloned()
+            .collect()
     }
 }
 
