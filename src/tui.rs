@@ -49,66 +49,124 @@ const REFRESH_DELAY_SEC: u64 = 300;
 const REDRAW_DELAY_SEC: u64 = 60;
 
 pub async fn run() -> Result<()> {
-    let res = _run().await;
+    let res = App::default().run().await;
     ratatui::restore();
     res
 }
 
-async fn _run() -> Result<()> {
-    let mut terminal = ratatui::init();
-    let mut list_state = ListState::default();
-    list_state.select_first();
+#[derive(Default)]
+struct App {}
 
-    let (tx, mut rx) = mpsc::channel::<Message>(32);
+impl App {
+    async fn run(&self) -> Result<()> {
+        let mut terminal = ratatui::init();
+        let mut list_state = ListState::default();
+        list_state.select_first();
 
-    let notifications = refresh().await?;
-    terminal.draw(|frame| {
-        draw(
-            frame,
-            &notifications,
-            &mut list_state,
-            &String::new(),
-            &String::new(),
-        )
-    })?;
+        let (tx, mut rx) = mpsc::channel::<Message>(32);
 
-    let tx_cloned = tx.clone();
-    let notif_handle = tokio::spawn(refresh_notifs_loop(tx.clone()));
-    let refresh_handle = tokio::spawn(refresh_ui_loop(tx.clone()));
-    std::thread::spawn(|| handle_input_loop(tx_cloned));
+        let notifications = refresh().await?;
+        terminal.draw(|frame| {
+            self.draw(
+                frame,
+                &notifications,
+                &mut list_state,
+                &String::new(),
+                &String::new(),
+            )
+        })?;
 
-    loop {
-        let maybe_message = rx.recv().await;
-        if let Some(message) = maybe_message {
-            match message {
-                Message::Action(action) => {
-                    if action == MessageAction::Quit {
-                        break;
+        let tx_cloned = tx.clone();
+        let notif_handle = tokio::spawn(refresh_notifs_loop(tx.clone()));
+        let refresh_handle = tokio::spawn(refresh_ui_loop(tx.clone()));
+        std::thread::spawn(|| handle_input_loop(tx_cloned));
+
+        loop {
+            let maybe_message = rx.recv().await;
+            if let Some(message) = maybe_message {
+                match message {
+                    Message::Action(action) => {
+                        if action == MessageAction::Quit {
+                            break;
+                        }
+                        let message_action = action.clone();
+                        let notifications = refresh().await?;
+                        tokio::spawn(handle_action(
+                            tx.clone(),
+                            message_action,
+                            list_state.selected(),
+                            notifications,
+                        ));
                     }
-                    let message_action = action.clone();
-                    let notifications = refresh().await?;
-                    tokio::spawn(handle_action(
-                        tx.clone(),
-                        message_action,
-                        list_state.selected(),
-                        notifications,
-                    ));
+                    Message::Ui(ui) => {
+                        // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
+                        // it should be done only after a change in the list
+                        let notifications = refresh().await?;
+                        self.update_ui(ui, &mut terminal, &mut list_state, &notifications)
+                            .await?;
+                    }
+                    Message::Noop => {}
                 }
-                Message::Ui(ui) => {
-                    // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
-                    // it should be done only after a change in the list
-                    let notifications = refresh().await?;
-                    update_ui(ui, &mut terminal, &mut list_state, &notifications).await?;
-                }
-                Message::Noop => {}
             }
         }
+
+        notif_handle.abort();
+        refresh_handle.abort();
+
+        Ok(())
     }
 
-    notif_handle.abort();
-    refresh_handle.abort();
+    fn draw(
+        &self,
+        frame: &mut Frame,
+        notifications: &Vec<Notification>,
+        list_state: &mut ListState,
+        error: &String,
+        info: &String,
+    ) {
+        let status = if error.is_empty() {
+            if info.is_empty() {
+                format!("Riirview, {} notifs", notifications.len())
+            } else {
+                info.to_string()
+            }
+        } else {
+            error.to_string()
+        };
+        let title = Line::from_iter([status]);
 
-    Ok(())
+        let layout_v = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).spacing(1);
+        let [one, two] = layout_v.areas(frame.area());
+
+        frame.render_widget(title, one);
+        let list = List::new(notifications).highlight_style(Modifier::REVERSED);
+        frame.render_stateful_widget(list, two, list_state);
+    }
+
+    async fn update_ui(
+        &self,
+        message: MessageUi,
+        terminal: &mut DefaultTerminal,
+        list_state: &mut ListState,
+        notifications: &Vec<Notification>,
+    ) -> Result<()> {
+        let (info, err) = match message {
+            MessageUi::MoveUp(mov) => {
+                list_state.scroll_up_by(mov);
+                (String::new(), String::new())
+            }
+            MessageUi::MoveDown(mov) => {
+                list_state.scroll_down_by(mov);
+                (String::new(), String::new())
+            }
+            MessageUi::Error(err) => (String::new(), err),
+            MessageUi::Info(info) => (info, String::new()),
+            MessageUi::Redraw => (String::new(), String::new()),
+        };
+
+        terminal.draw(|frame| self.draw(frame, notifications, list_state, &err, &info))?;
+        Ok(())
+    }
 }
 
 async fn handle_action(
@@ -231,56 +289,6 @@ async fn refresh_ui_loop(tx: mpsc::Sender<Message>) {
             .await
             .expect("cannot send");
     }
-}
-
-async fn update_ui(
-    message: MessageUi,
-    terminal: &mut DefaultTerminal,
-    list_state: &mut ListState,
-    notifications: &Vec<Notification>,
-) -> Result<()> {
-    let (info, err) = match message {
-        MessageUi::MoveUp(mov) => {
-            list_state.scroll_up_by(mov);
-            (String::new(), String::new())
-        }
-        MessageUi::MoveDown(mov) => {
-            list_state.scroll_down_by(mov);
-            (String::new(), String::new())
-        }
-        MessageUi::Error(err) => (String::new(), err),
-        MessageUi::Info(info) => (info, String::new()),
-        MessageUi::Redraw => (String::new(), String::new()),
-    };
-
-    terminal.draw(|frame| draw(frame, notifications, list_state, &err, &info))?;
-    Ok(())
-}
-
-fn draw(
-    frame: &mut Frame,
-    notifications: &Vec<Notification>,
-    list_state: &mut ListState,
-    error: &String,
-    info: &String,
-) {
-    let status = if error.is_empty() {
-        if info.is_empty() {
-            format!("Riirview, {} notifs", notifications.len())
-        } else {
-            info.to_string()
-        }
-    } else {
-        error.to_string()
-    };
-    let title = Line::from_iter([status]);
-
-    let layout_v = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).spacing(1);
-    let [one, two] = layout_v.areas(frame.area());
-
-    frame.render_widget(title, one);
-    let list = List::new(notifications).highlight_style(Modifier::REVERSED);
-    frame.render_stateful_widget(list, two, list_state);
 }
 
 async fn open_gh(idx: Option<usize>, notifications: &[Notification]) -> Result<(), String> {
