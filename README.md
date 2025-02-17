@@ -102,7 +102,7 @@ We don't do any validity check on param.
 | g                 | refresh notifications                      |
 | enter             | open github page                           |
 | r                 | mark notification as done                  |
-| R                 | mark all notifications under cusor as done |
+| R                 | mark all notifications below cusor as done |
 | q                 | quit                                       |
 
 ## Files
