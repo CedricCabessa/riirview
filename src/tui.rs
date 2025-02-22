@@ -10,6 +10,7 @@ use ratatui::text::*;
 use ratatui::widgets::{ListState, Paragraph};
 use ratatui::{
     layout::{Alignment, Constraint, Flex, Layout, Rect},
+    style::Color,
     text::Line,
     widgets::{Block, Clear, List},
     DefaultTerminal,
@@ -44,8 +45,25 @@ enum MessageUi {
     MoveDown(u16),
     Error(String),
     Info(String),
-    Popup(String),
+    Popup(Popup),
     Redraw,
+}
+
+enum Headline {
+    Info(String),
+    Error(String),
+}
+
+impl Default for Headline {
+    fn default() -> Self {
+        Headline::Info("".into())
+    }
+}
+
+#[derive(Default, Clone, Debug, PartialEq)]
+struct Popup {
+    title: String,
+    content: String,
 }
 
 const REFRESH_DELAY_SEC: u64 = 300;
@@ -60,7 +78,8 @@ pub async fn run() -> Result<()> {
 
 #[derive(Default)]
 struct App {
-    show_popup: bool,
+    headline: Headline,
+    popup: Option<Popup>,
 }
 
 impl App {
@@ -72,7 +91,7 @@ impl App {
         let (tx, mut rx) = mpsc::channel::<Message>(32);
 
         let notifications = refresh().await?;
-        terminal.draw(|frame| self.draw(frame, &notifications, &mut list_state, "", "", ""))?;
+        terminal.draw(|frame| self.draw(frame, &notifications, &mut list_state))?;
 
         let tx_cloned = tx.clone();
         let notif_handle = tokio::spawn(refresh_notifs_loop(tx.clone()));
@@ -86,8 +105,8 @@ impl App {
                 // it should be done only after a change in the list
                 let notifications = refresh().await?;
 
-                if self.show_popup {
-                    self.show_popup = false;
+                if self.popup.is_some() {
+                    self.popup = None;
                     self.update_ui(
                         MessageUi::Redraw,
                         &mut terminal,
@@ -131,18 +150,16 @@ impl App {
         frame: &mut Frame,
         notifications: &Vec<Notification>,
         list_state: &mut ListState,
-        error: &str,
-        info: &str,
-        popup: &str,
     ) {
-        let status = if error.is_empty() {
-            if info.is_empty() {
-                format!("Riirview, {} notifs", notifications.len())
-            } else {
-                info.to_string()
+        let status = match &self.headline {
+            Headline::Info(info) => {
+                if info.is_empty() {
+                    Span::raw(format!("Riirview, {} notifs", notifications.len()))
+                } else {
+                    Span::raw(info.to_string())
+                }
             }
-        } else {
-            error.to_string()
+            Headline::Error(error) => Span::raw(error.clone()).style(Color::Red),
         };
 
         let head = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]);
@@ -158,9 +175,9 @@ impl App {
 
         let list = List::new(notifications).highlight_style(Modifier::REVERSED);
         frame.render_stateful_widget(list, main_area, list_state);
-        if self.show_popup {
+        if let Some(popup) = &self.popup {
             let area = frame.area();
-            let lines: Vec<Line> = popup.split('\n').map(Line::from).collect();
+            let lines: Vec<Line> = popup.content.split('\n').map(Line::from).collect();
             let max_len = lines
                 .iter()
                 .max_by(|a, b| a.width().cmp(&b.width()))
@@ -169,7 +186,7 @@ impl App {
             let width: u16 = (max_len.width() + 3).try_into().unwrap();
             let area = popup_area(area, height, width);
             let paragraph = Paragraph::new(lines);
-            let block = Block::bordered().title("Explain");
+            let block = Block::bordered().title(popup.title.as_str());
             frame.render_widget(Clear, area); //this clears out the background
             frame.render_widget(paragraph.block(block), area);
         }
@@ -182,25 +199,25 @@ impl App {
         list_state: &mut ListState,
         notifications: &Vec<Notification>,
     ) -> Result<()> {
-        let (info, err, popup) = match message {
+        match message {
             MessageUi::MoveUp(mov) => {
                 list_state.scroll_up_by(mov);
-                (String::new(), String::new(), String::new())
+                self.headline = Headline::default();
             }
             MessageUi::MoveDown(mov) => {
                 list_state.scroll_down_by(mov);
-                (String::new(), String::new(), String::new())
+                self.headline = Headline::default();
             }
-            MessageUi::Error(err) => (String::new(), err, String::new()),
-            MessageUi::Info(info) => (info, String::new(), String::new()),
-            MessageUi::Redraw => (String::new(), String::new(), String::new()),
+            MessageUi::Error(err) => self.headline = Headline::Error(err),
+            MessageUi::Info(info) => self.headline = Headline::Info(info),
+            MessageUi::Redraw => self.headline = Headline::default(),
             MessageUi::Popup(popup) => {
-                self.show_popup = true;
-                (String::new(), String::new(), popup)
+                self.popup = Some(popup);
+                self.headline = Headline::default();
             }
         };
 
-        terminal.draw(|frame| self.draw(frame, notifications, list_state, &err, &info, &popup))?;
+        terminal.draw(|frame| self.draw(frame, notifications, list_state))?;
         Ok(())
     }
 }
@@ -259,17 +276,23 @@ async fn handle_action(
         MessageAction::SyncBackground => sync().await,
         MessageAction::Explain => match explain(idx, &notifications).await {
             Ok(explanation) => {
-                tx.send(Message::Ui(MessageUi::Popup(explanation)))
-                    .await
-                    .expect("cannot send");
+                tx.send(Message::Ui(MessageUi::Popup(Popup {
+                    title: "Explain".into(),
+                    content: explanation,
+                })))
+                .await
+                .expect("cannot send");
                 Ok(())
             }
             Err(e) => Err(e),
         },
         MessageAction::Help => {
-            tx.send(Message::Ui(MessageUi::Popup(parse_keymap_in_readme())))
-                .await
-                .expect("cannot send");
+            tx.send(Message::Ui(MessageUi::Popup(Popup {
+                title: "Help".into(),
+                content: parse_keymap_in_readme(),
+            })))
+            .await
+            .expect("cannot send");
             Ok(())
         }
         MessageAction::Quit => Ok(()), // handled in loop break
