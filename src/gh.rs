@@ -1,7 +1,7 @@
 use anyhow::anyhow;
-use anyhow::Context;
 use anyhow::Result;
 use chrono::{NaiveDateTime, Utc};
+use core::fmt;
 use futures::stream::iter;
 use futures::StreamExt;
 use futures::TryStreamExt;
@@ -108,9 +108,9 @@ struct Client {
 }
 
 impl Client {
-    pub fn new() -> Result<Client> {
+    pub fn new() -> Result<Client, Error> {
         let client = reqwest::Client::new();
-        let token = dotenvy::var("GH_TOKEN").context("GH_TOKEN env variable is missing")?;
+        let token = dotenvy::var("GH_TOKEN").map_err(|_| Error::MissingToken)?;
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "reqwest".parse().unwrap());
         headers.insert("Accept", "application/vnd.github+json".parse().unwrap());
@@ -220,6 +220,21 @@ impl Client {
         Ok(resp.error_for_status()?)
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub enum Error {
+    MissingToken,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::MissingToken => write!(f, "Env variable GH_TOKEN is missing"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 fn url_to_page(url: &str) -> Result<u32> {
     let url = Url::parse(url)?;

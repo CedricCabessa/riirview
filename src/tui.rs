@@ -1,3 +1,4 @@
+use crate::gh::Error as GhError;
 use crate::models::{Notification, NotificationState, NotificationType};
 use crate::score::Error as ScoreError;
 use crate::service;
@@ -438,26 +439,37 @@ async fn mark_as_read(notification: &Notification) -> Result<(), String> {
 }
 
 async fn sync() -> Result<(), String> {
-    service::sync()
-        .await
-        .map_err(|err| match err.downcast_ref::<ScoreError>() {
+    service::sync().await.map_err(|err| {
+        let score_error_msg = match err.downcast_ref::<ScoreError>() {
             Some(ScoreError::RuleFileNotFound) => {
                 error!("rule file not found");
-                "rule file not found".into()
+                Some("rule file not found".into())
             }
             Some(ScoreError::InvalidToml) => {
                 error!("invalid toml");
-                "invalid toml".into()
+                Some("invalid toml".into())
             }
             Some(ScoreError::InvalidRule(msg)) => {
                 error!("invalid rule {:?}", msg);
-                format!("invalid rule {:?}", msg)
+                Some(format!("invalid rule {:?}", msg))
             }
-            None => {
-                error!("{}", err);
-                "cannot sync".into()
+            None => None,
+        };
+
+        let gh_error_msg = match err.downcast_ref::<GhError>() {
+            Some(GhError::MissingToken) => {
+                error!("env var GH_TOKEN is missing");
+                Some("env var GH_TOKEN is missing".to_string())
             }
-        })
+            None => None,
+        };
+
+        match (gh_error_msg, score_error_msg) {
+            (Some(g), _) => g,
+            (_, Some(s)) => s,
+            (None, None) => "cannot sync".into(),
+        }
+    })
 }
 
 async fn refresh() -> Result<Vec<Notification>> {
