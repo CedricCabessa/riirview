@@ -1,6 +1,6 @@
 use crate::models::Notification;
 use core::fmt;
-use log::{debug, info};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -58,9 +58,15 @@ pub struct Scorer {
 
 impl Scorer {
     pub fn new(toml_path: PathBuf) -> Result<Scorer, Error> {
-        let config = fs::read_to_string(toml_path)?;
+        let config_res = fs::read_to_string(toml_path);
+        if let Err(ref error) = config_res {
+            if let Error::RuleFileNotFound = error.into() {
+                error!("No rules file found!");
+                return Ok(Scorer { rules: vec![] });
+            }
+        }
+        let config = config_res?;
 
-        //let value = config.parse::<HashMap<String, Rule>>();
         let toml_rules: HashMap<String, TomlRule> = toml::from_str(&config)?;
         let rules: Result<Vec<Rule>, String> = toml_rules
             .iter()
@@ -157,6 +163,11 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+impl From<&io::Error> for Error {
+    fn from(_: &io::Error) -> Self {
+        Error::RuleFileNotFound
+    }
+}
 impl From<io::Error> for Error {
     fn from(_: io::Error) -> Self {
         Error::RuleFileNotFound
