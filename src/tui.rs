@@ -95,8 +95,8 @@ impl App {
         terminal.draw(|frame| self.draw(frame, &notifications, &mut list_state))?;
 
         let tx_cloned = tx.clone();
-        let notif_handle = tokio::spawn(refresh_notifs_loop(tx.clone()));
-        let refresh_handle = tokio::spawn(refresh_ui_loop(tx.clone()));
+        let notif_handle = tokio::spawn(auto_sync_notifs_loop(tx.clone()));
+        let refresh_handle = tokio::spawn(auto_refresh_ui_loop(tx.clone()));
         std::thread::spawn(|| handle_input_loop(tx_cloned));
 
         loop {
@@ -337,7 +337,7 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
     }
 }
 
-async fn refresh_notifs_loop(tx: mpsc::Sender<Message>) {
+async fn auto_sync_notifs_loop(tx: mpsc::Sender<Message>) {
     loop {
         debug!("refreshing notifications");
         let (refresh_delay, need_update) = match service::check_update_and_limit().await {
@@ -361,7 +361,7 @@ async fn refresh_notifs_loop(tx: mpsc::Sender<Message>) {
     }
 }
 
-async fn refresh_ui_loop(tx: mpsc::Sender<Message>) {
+async fn auto_refresh_ui_loop(tx: mpsc::Sender<Message>) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(REDRAW_DELAY_SEC)).await;
         tx.send(Message::Ui(MessageUi::Redraw))

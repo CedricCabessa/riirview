@@ -38,18 +38,12 @@ pub async fn sync() -> Result<()> {
 
     info!("inserting {} notifications", gh_notifications.len());
     for gh_notification in gh_notifications {
+        let notif_url = &gh_notification.subject.url.unwrap_or(String::default());
         let (_url, _type, _author, _state) = match gh_notification.subject.r#type {
             gh::NotificationType::PullRequest => {
                 let pr = gh_prs
                     .iter()
-                    .find(|pr| {
-                        pr.url
-                            == *gh_notification
-                                .subject
-                                .url
-                                .as_ref()
-                                .unwrap_or(&String::default())
-                    })
+                    .find(|pr| pr.url == *notif_url)
                     .ok_or(anyhow!("no pr found"))?;
 
                 (
@@ -72,14 +66,7 @@ pub async fn sync() -> Result<()> {
             gh::NotificationType::Release => {
                 let release = gh_releases
                     .iter()
-                    .find(|release| {
-                        release.url
-                            == *gh_notification
-                                .subject
-                                .url
-                                .as_ref()
-                                .unwrap_or(&String::default())
-                    })
+                    .find(|release| release.url == *notif_url)
                     .ok_or(anyhow!("no release found"))?;
                 (
                     release.html_url.clone(),
@@ -91,14 +78,7 @@ pub async fn sync() -> Result<()> {
             gh::NotificationType::Issue => {
                 let issue = gh_issues
                     .iter()
-                    .find(|issue| {
-                        issue.url
-                            == *gh_notification
-                                .subject
-                                .url
-                                .as_ref()
-                                .unwrap_or(&String::default())
-                    })
+                    .find(|issue| issue.url == *notif_url)
                     .ok_or(anyhow!("no issue found"))?;
                 (
                     issue.html_url.clone(),
