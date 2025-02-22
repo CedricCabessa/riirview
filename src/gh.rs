@@ -11,6 +11,7 @@ use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
 use serde::Deserialize;
+use std::future::Future;
 use url::Url;
 
 #[derive(Deserialize, Debug)]
@@ -112,7 +113,7 @@ impl Client {
         let client = reqwest::Client::new();
         let token = dotenvy::var("GH_TOKEN").map_err(|_| Error::MissingToken)?;
         let mut headers = HeaderMap::new();
-        headers.insert("User-Agent", "reqwest".parse().unwrap());
+        headers.insert("User-Agent", "riirview".parse().unwrap());
         headers.insert("Accept", "application/vnd.github+json".parse().unwrap());
         headers.insert(
             "Authorization",
@@ -307,17 +308,19 @@ async fn get_issue(url: String) -> Result<Issue> {
     Ok(resp.json::<Issue>().await?)
 }
 
+const NB_TASK: usize = 30;
+
 pub async fn fetch_notifications(last_update: Option<NaiveDateTime>) -> Result<Vec<Notification>> {
     let client = Client::new()?;
     let resp = client.get_notifications(last_update).await?;
 
-    let mut repos = if let Some(link) = resp.headers().get("link") {
+    let mut notifications = if let Some(link) = resp.headers().get("link") {
         let link = link.to_str()?;
         let urls = pages_from_link(link)?;
 
         iter(urls)
             .map(get_notifications)
-            .buffer_unordered(30)
+            .buffer_unordered(NB_TASK)
             .try_fold(vec![], |mut acc, x| async {
                 acc.extend(x);
                 Ok(acc)
@@ -328,60 +331,36 @@ pub async fn fetch_notifications(last_update: Option<NaiveDateTime>) -> Result<V
     };
 
     let res = resp.json::<Vec<Notification>>().await?;
-    repos.extend(res);
+    notifications.extend(res);
 
-    Ok(repos)
+    Ok(notifications)
 }
 
 pub async fn fetch_prs(notifications: &[Notification]) -> Result<Vec<PullRequest>> {
-    let urls: Vec<String> = notifications
-        .iter()
-        .filter_map(|notif| {
-            if notif.subject.r#type == NotificationType::PullRequest {
-                notif.subject.url.clone()
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    iter(urls)
-        .map(get_pr)
-        .buffer_unordered(30)
-        .try_fold(vec![], |mut acc, x| async {
-            acc.push(x);
-            Ok(acc)
-        })
-        .await
+    fetch_object(notifications, NotificationType::PullRequest, get_pr).await
 }
 
 pub async fn fetch_releases(notifications: &[Notification]) -> Result<Vec<Release>> {
-    let urls: Vec<String> = notifications
-        .iter()
-        .filter_map(|notif| {
-            if notif.subject.r#type == NotificationType::Release {
-                notif.subject.url.clone()
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    iter(urls)
-        .map(get_release)
-        .buffer_unordered(30)
-        .try_fold(vec![], |mut acc, x| async {
-            acc.push(x);
-            Ok(acc)
-        })
-        .await
+    fetch_object(notifications, NotificationType::Release, get_release).await
 }
 
 pub async fn fetch_issues(notifications: &[Notification]) -> Result<Vec<Issue>> {
+    fetch_object(notifications, NotificationType::Issue, get_issue).await
+}
+
+async fn fetch_object<F, Fut, T>(
+    notifications: &[Notification],
+    notification_type: NotificationType,
+    getter: F,
+) -> Result<Vec<T>>
+where
+    Fut: Future<Output = Result<T>>,
+    F: Fn(String) -> Fut,
+{
     let urls: Vec<String> = notifications
         .iter()
         .filter_map(|notif| {
-            if notif.subject.r#type == NotificationType::Issue {
+            if notif.subject.r#type == notification_type {
                 notif.subject.url.clone()
             } else {
                 None
@@ -390,8 +369,8 @@ pub async fn fetch_issues(notifications: &[Notification]) -> Result<Vec<Issue>> 
         .collect();
 
     iter(urls)
-        .map(get_issue)
-        .buffer_unordered(30)
+        .map(getter)
+        .buffer_unordered(NB_TASK)
         .try_fold(vec![], |mut acc, x| async {
             acc.push(x);
             Ok(acc)
@@ -407,7 +386,7 @@ pub async fn mark_as_done(id: &String) -> Result<()> {
 pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<()> {
     iter(ids)
         .map(mark_as_done)
-        .buffer_unordered(30)
+        .buffer_unordered(NB_TASK)
         .try_collect()
         .await
 }
