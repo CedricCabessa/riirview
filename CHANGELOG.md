@@ -2,6 +2,7 @@
 ## someday
 
  - Explain scoring, keybinding "x"
+ - Help, keybinding "?"
 
 # 1.1.0
 ## 2025-02-16

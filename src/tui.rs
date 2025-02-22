@@ -9,7 +9,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::*;
 use ratatui::widgets::{ListState, Paragraph};
 use ratatui::{
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Rect},
     text::Line,
     widgets::{Block, Clear, List},
     DefaultTerminal,
@@ -35,6 +35,7 @@ enum MessageAction {
     Sync,
     SyncBackground,
     Explain,
+    Help,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -49,6 +50,7 @@ enum MessageUi {
 
 const REFRESH_DELAY_SEC: u64 = 300;
 const REDRAW_DELAY_SEC: u64 = 60;
+const README: &[u8] = include_bytes!("../README.md");
 
 pub async fn run() -> Result<()> {
     let res = App::default().run().await;
@@ -142,14 +144,20 @@ impl App {
         } else {
             error.to_string()
         };
-        let title = Line::from_iter([status]);
+
+        let head = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]);
+        let [status_rect, help_rect] = head.areas(frame.area());
+        frame.render_widget(Line::from(status).alignment(Alignment::Left), status_rect);
+        frame.render_widget(
+            Line::from("? for Help").alignment(Alignment::Right),
+            help_rect,
+        );
 
         let layout_v = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).spacing(1);
-        let [one, two] = layout_v.areas(frame.area());
+        let [_, main_area] = layout_v.areas(frame.area());
 
-        frame.render_widget(title, one);
         let list = List::new(notifications).highlight_style(Modifier::REVERSED);
-        frame.render_stateful_widget(list, two, list_state);
+        frame.render_stateful_widget(list, main_area, list_state);
         if self.show_popup {
             let area = frame.area();
             let lines: Vec<Line> = popup.split('\n').map(Line::from).collect();
@@ -258,6 +266,12 @@ async fn handle_action(
             }
             Err(e) => Err(e),
         },
+        MessageAction::Help => {
+            tx.send(Message::Ui(MessageUi::Popup(parse_keymap_in_readme())))
+                .await
+                .expect("cannot send");
+            Ok(())
+        }
         MessageAction::Quit => Ok(()), // handled in loop break
     };
 
@@ -289,6 +303,7 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
                 KeyCode::Char('R') => Message::Action(MessageAction::MarkBelowAsDone),
                 KeyCode::Char('g') => Message::Action(MessageAction::Sync),
                 KeyCode::Char('x') => Message::Action(MessageAction::Explain),
+                KeyCode::Char('?') => Message::Action(MessageAction::Help),
                 _ => Message::Noop,
             };
 
@@ -520,6 +535,30 @@ fn ellipsis(txt: &str, max_len: usize) -> String {
     }
 }
 
+// TODO: for more fun, try to do it at compile time
+fn parse_keymap_in_readme() -> String {
+    let readme: String = String::from_utf8_lossy(README).into();
+    let mut keymap = "".to_string();
+    let mut chapter_found = false;
+    let mut array_found = false;
+    for line in readme.split('\n') {
+        if line.starts_with("## Keymap") {
+            chapter_found = true;
+        } else if chapter_found && line.starts_with("|") {
+            array_found = true;
+        } else if array_found && !line.starts_with("|") {
+            break;
+        }
+        if array_found {
+            let len = line.len();
+            keymap.push('\n');
+            keymap.push_str(&line[1..len - 1]);
+        }
+    }
+
+    keymap
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,5 +567,13 @@ mod tests {
     fn test_ellipsis() {
         assert_eq!(ellipsis("lorem ipsum", 5), "lore…");
         assert_eq!(ellipsis("lorem ipsum", 13), "lorem ipsum  ");
+    }
+
+    #[test]
+    fn test_keymap() {
+        // This test can be flaky...
+        let keymap = parse_keymap_in_readme();
+        assert!(keymap.contains("up/down           | move cursor up or down"));
+        assert!(keymap.split("\n").collect::<Vec<&str>>().len() >= 10);
     }
 }
