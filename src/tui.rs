@@ -69,7 +69,9 @@ struct Popup {
 
 const REFRESH_DELAY_SEC: u64 = 300;
 const REDRAW_DELAY_SEC: u64 = 60;
-const README: &[u8] = include_bytes!("../README.md");
+
+// define KEYMAP str constant with key binding info
+include!(concat!(env!("OUT_DIR"), "/keymap.rs"));
 
 pub async fn run() -> Result<()> {
     let res = App::default().run().await;
@@ -290,7 +292,7 @@ async fn handle_action(
         MessageAction::Help => {
             tx.send(Message::Ui(MessageUi::Popup(Popup {
                 title: "Help".into(),
-                content: parse_keymap_in_readme(),
+                content: KEYMAP.into(),
             })))
             .await
             .expect("cannot send");
@@ -570,30 +572,6 @@ fn ellipsis(txt: &str, max_len: usize) -> String {
     }
 }
 
-// TODO: for more fun, try to do it at compile time
-fn parse_keymap_in_readme() -> String {
-    let readme: String = String::from_utf8_lossy(README).into();
-    let mut keymap = "".to_string();
-    let mut chapter_found = false;
-    let mut array_found = false;
-    for line in readme.split('\n') {
-        if line.starts_with("## Keymap") {
-            chapter_found = true;
-        } else if chapter_found && line.starts_with("|") {
-            array_found = true;
-        } else if array_found && !line.starts_with("|") {
-            break;
-        }
-        if array_found {
-            let len = line.len();
-            keymap.push('\n');
-            keymap.push_str(&line[1..len - 1]);
-        }
-    }
-
-    keymap
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -607,8 +585,7 @@ mod tests {
     #[test]
     fn test_keymap() {
         // This test can be flaky...
-        let keymap = parse_keymap_in_readme();
-        assert!(keymap.contains("up/down           | move cursor up or down"));
-        assert!(keymap.split("\n").collect::<Vec<&str>>().len() >= 10);
+        assert!(KEYMAP.contains("up/down           | move cursor up or down"));
+        assert!(KEYMAP.split("\n").collect::<Vec<&str>>().len() >= 10);
     }
 }
