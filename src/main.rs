@@ -5,7 +5,7 @@ use log::LevelFilter;
 use log::{debug, info};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
-use riirview::{dirs, establish_connection, run_db_migrations, tui};
+use riirview::{dirs, get_connection_pool, run_db_migrations, tui};
 
 fn main() -> Result<()> {
     if std::env::args().nth(1) == Some("--version".into()) {
@@ -56,7 +56,8 @@ async fn tokio_main() -> Result<()> {
     );
     debug!("debug enabled");
 
-    run_db_migrations(&mut establish_connection());
+    let mut connection = get_connection_pool().get().unwrap();
+    run_db_migrations(&mut connection);
 
     tui::run().await
 }

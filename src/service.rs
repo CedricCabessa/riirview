@@ -14,15 +14,13 @@ use log::{debug, error, info};
 use models::NotificationState;
 use schema::notifications::dsl::*;
 
-pub async fn check_update_and_limit() -> Result<UpdateStatus> {
-    let connection = &mut establish_connection();
-    let last_update = get_recent_update(connection).ok_or(anyhow!("no recent update"))?;
+pub async fn check_update_and_limit(mut connection: DbConnection) -> Result<UpdateStatus> {
+    let last_update = get_recent_update(&mut connection).ok_or(anyhow!("no recent update"))?;
     gh::check_update_and_limit(last_update).await
 }
 
-pub async fn sync() -> Result<()> {
-    let connection = &mut establish_connection();
-    let last_update = get_recent_update(connection);
+pub async fn sync(mut connection: DbConnection) -> Result<()> {
+    let last_update = get_recent_update(&mut connection);
 
     let gh_notifications = gh::fetch_notifications(last_update).await?;
 
@@ -130,7 +128,7 @@ pub async fn sync() -> Result<()> {
                 score_boost.eq(excluded(score_boost)),
                 done.eq(false),
             ))
-            .execute(connection);
+            .execute(&mut connection);
         if res.is_err() {
             error!(
                 "insert err {} {:?}",
@@ -142,49 +140,57 @@ pub async fn sync() -> Result<()> {
     Ok(())
 }
 
-pub async fn get_notifications() -> Result<Vec<DBNotification>> {
-    let connection = &mut establish_connection();
+pub async fn get_notifications(mut connection: DbConnection) -> Result<Vec<DBNotification>> {
     Ok(notifications
         .select(DBNotification::as_select())
         .filter(done.eq(false))
         .order_by(((score + score_boost).desc(), updated_at.desc()))
-        .load(connection)?)
+        .load(&mut connection)?)
 }
 
-pub async fn mark_notification_as_done(notification: &DBNotification) -> Result<()> {
-    let connection = &mut establish_connection();
+pub async fn mark_notification_as_done(
+    mut connection: DbConnection,
+    notification: &DBNotification,
+) -> Result<()> {
     gh::mark_as_done(&notification.id).await?;
     update(notification)
         .set(done.eq(true))
-        .execute(connection)?;
+        .execute(&mut connection)?;
     Ok(())
 }
 
-pub async fn mark_notifications_as_done(notifs: &Vec<&DBNotification>) -> Result<()> {
-    let connection = &mut establish_connection();
+pub async fn mark_notifications_as_done(
+    mut connection: DbConnection,
+    notifs: &Vec<&DBNotification>,
+) -> Result<()> {
     let ids = notifs.iter().map(|n| n.id.clone()).collect();
     gh::mark_as_done_multiple(&ids).await?;
     update(notifications)
         .filter(id.eq_any(ids))
         .set(done.eq(true))
-        .execute(connection)?;
+        .execute(&mut connection)?;
     Ok(())
 }
 
-pub async fn mark_notification_as_read(notification: &DBNotification) -> Result<()> {
-    let connection = &mut establish_connection();
+pub async fn mark_notification_as_read(
+    mut connection: DbConnection,
+    notification: &DBNotification,
+) -> Result<()> {
     gh::mark_as_read(&notification.id).await?;
     update(notification)
         .set(unread.eq(false))
-        .execute(connection)?;
+        .execute(&mut connection)?;
     Ok(())
 }
 
-pub async fn update_score(notification: &DBNotification, modifier: i32) -> Result<()> {
-    let connection = &mut establish_connection();
+pub async fn update_score(
+    mut connection: DbConnection,
+    notification: &DBNotification,
+    modifier: i32,
+) -> Result<()> {
     update(notification)
         .set(score_boost.eq(notification.score_boost + modifier))
-        .execute(connection)?;
+        .execute(&mut connection)?;
     Ok(())
 }
 
@@ -195,7 +201,7 @@ pub async fn explain(notification: &DBNotification) -> Result<Vec<Rule>> {
     Ok(rules)
 }
 
-fn get_recent_update(connection: &mut SqliteConnection) -> Option<NaiveDateTime> {
+fn get_recent_update(connection: &mut DbConnection) -> Option<NaiveDateTime> {
     let recent_pr = notifications
         .select(DBNotification::as_select())
         .order_by(updated_at.desc())

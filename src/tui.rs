@@ -1,7 +1,7 @@
 use crate::gh::Error as GhError;
 use crate::models::{Notification, NotificationState, NotificationType};
 use crate::score::Error as ScoreError;
-use crate::service;
+use crate::{DbConnection, DbConnectionManager, Pool, get_connection_pool, service};
 use anyhow::Result;
 use chrono_humanize::{Accuracy, HumanTime, Tense};
 use log::{debug, error, info};
@@ -92,12 +92,13 @@ impl App {
         list_state.select_first();
 
         let (tx, mut rx) = mpsc::channel::<Message>(32);
+        let pool = get_connection_pool();
 
-        let notifications = refresh().await?;
+        let notifications = refresh(pool.clone().get()?).await?;
         terminal.draw(|frame| self.draw(frame, &notifications, &mut list_state))?;
 
         let tx_cloned = tx.clone();
-        let notif_handle = tokio::spawn(auto_sync_notifs_loop(tx.clone()));
+        let notif_handle = tokio::spawn(auto_sync_notifs_loop(tx.clone(), pool.clone()));
         let refresh_handle = tokio::spawn(auto_refresh_ui_loop(tx.clone()));
         std::thread::spawn(|| handle_input_loop(tx_cloned));
 
@@ -106,7 +107,7 @@ impl App {
             if let Some(message) = maybe_message {
                 // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
                 // it should be done only after a change in the list
-                let notifications = refresh().await?;
+                let notifications = refresh(pool.clone().get()?).await?;
 
                 if self.popup.is_some() {
                     self.popup = None;
@@ -128,6 +129,7 @@ impl App {
                         let message_action = action.clone();
                         tokio::spawn(handle_action(
                             tx.clone(),
+                            pool.clone().get()?,
                             message_action,
                             list_state.selected(),
                             notifications,
@@ -227,6 +229,7 @@ impl App {
 
 async fn handle_action(
     tx: mpsc::Sender<Message>,
+    connection: DbConnection,
     message: MessageAction,
     idx: Option<usize>,
     notifications: Vec<Notification>,
@@ -234,14 +237,14 @@ async fn handle_action(
     debug!("handle_message {message:?}");
     let res = match message {
         MessageAction::ScoreIncrement(inc) => {
-            let res = update_score(idx, &notifications, inc).await;
+            let res = update_score(connection, idx, &notifications, inc).await;
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
             res
         }
         MessageAction::MarkAsDone => {
-            let res = mark_as_done(idx, &notifications).await;
+            let res = mark_as_done(connection, idx, &notifications).await;
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
@@ -251,14 +254,14 @@ async fn handle_action(
             tx.send(Message::Ui(MessageUi::Info("mark as read...".into())))
                 .await
                 .expect("cannot send");
-            let res = mark_all_below_as_done(idx, &notifications).await;
+            let res = mark_all_below_as_done(connection, idx, &notifications).await;
             tx.send(Message::Ui(MessageUi::Info("mark as read complete".into())))
                 .await
                 .expect("cannot send");
             res
         }
         MessageAction::Open => {
-            let res = open_gh(idx, &notifications).await;
+            let res = open_gh(connection, idx, &notifications).await;
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
@@ -269,14 +272,14 @@ async fn handle_action(
                 .await
                 .expect("cannot send");
 
-            let res = sync().await;
+            let res = sync(connection).await;
 
             tx.send(Message::Ui(MessageUi::Info("sync done".into())))
                 .await
                 .expect("cannot send");
             res
         }
-        MessageAction::SyncBackground => sync().await,
+        MessageAction::SyncBackground => sync(connection).await,
         MessageAction::Explain => match explain(idx, &notifications).await {
             Ok(explanation) => {
                 tx.send(Message::Ui(MessageUi::Popup(Popup {
@@ -339,19 +342,20 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
     }
 }
 
-async fn auto_sync_notifs_loop(tx: mpsc::Sender<Message>) {
+async fn auto_sync_notifs_loop(tx: mpsc::Sender<Message>, pool: Pool<DbConnectionManager>) {
     loop {
         debug!("refreshing notifications");
-        let (refresh_delay, need_update) = match service::check_update_and_limit().await {
-            Err(_) => (REFRESH_DELAY_SEC, true),
-            Ok(update_status) => {
-                debug!("gh status {update_status:?}");
-                (
-                    std::cmp::max(REFRESH_DELAY_SEC, update_status.poll_interval),
-                    update_status.need_update,
-                )
-            }
-        };
+        let (refresh_delay, need_update) =
+            match service::check_update_and_limit(pool.get().unwrap()).await {
+                Err(_) => (REFRESH_DELAY_SEC, true),
+                Ok(update_status) => {
+                    debug!("gh status {update_status:?}");
+                    (
+                        std::cmp::max(REFRESH_DELAY_SEC, update_status.poll_interval),
+                        update_status.need_update,
+                    )
+                }
+            };
 
         info!("need_update: {need_update}, sleeping for: {refresh_delay} sec");
         if need_update {
@@ -380,12 +384,16 @@ fn popup_area(area: Rect, lines: u16, columns: u16) -> Rect {
     area
 }
 
-async fn open_gh(idx: Option<usize>, notifications: &[Notification]) -> Result<(), String> {
+async fn open_gh(
+    connection: DbConnection,
+    idx: Option<usize>,
+    notifications: &[Notification],
+) -> Result<(), String> {
     if let Some(idx) = idx {
         if let Some(notification) = notifications.get(idx) {
             return match open::that(notification.url.clone()) {
                 Ok(_) => {
-                    mark_as_read(notification).await?;
+                    mark_as_read(connection, notification).await?;
                     Ok(())
                 }
                 Err(e) => {
@@ -398,10 +406,14 @@ async fn open_gh(idx: Option<usize>, notifications: &[Notification]) -> Result<(
     Ok(())
 }
 
-async fn mark_as_done(idx: Option<usize>, notifications: &[Notification]) -> Result<(), String> {
+async fn mark_as_done(
+    connection: DbConnection,
+    idx: Option<usize>,
+    notifications: &[Notification],
+) -> Result<(), String> {
     if let Some(idx) = idx {
         if let Some(notification) = notifications.get(idx) {
-            return match service::mark_notification_as_done(notification).await {
+            return match service::mark_notification_as_done(connection, notification).await {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     error!("{e}");
@@ -414,12 +426,14 @@ async fn mark_as_done(idx: Option<usize>, notifications: &[Notification]) -> Res
 }
 
 async fn mark_all_below_as_done(
+    connection: DbConnection,
     idx: Option<usize>,
     notifications: &[Notification],
 ) -> Result<(), String> {
     if let Some(idx) = idx {
         let selected_notifications = notifications.iter().skip(idx).collect::<Vec<_>>();
-        return match service::mark_notifications_as_done(&selected_notifications).await {
+        return match service::mark_notifications_as_done(connection, &selected_notifications).await
+        {
             Ok(_) => Ok(()),
             Err(e) => {
                 error!("{e}");
@@ -430,8 +444,8 @@ async fn mark_all_below_as_done(
     Ok(())
 }
 
-async fn mark_as_read(notification: &Notification) -> Result<(), String> {
-    match service::mark_notification_as_read(notification).await {
+async fn mark_as_read(connection: DbConnection, notification: &Notification) -> Result<(), String> {
+    match service::mark_notification_as_read(connection, notification).await {
         Err(e) => {
             error!("{e}");
             Err(format!("Failed to mark as read: {}", e))
@@ -440,8 +454,8 @@ async fn mark_as_read(notification: &Notification) -> Result<(), String> {
     }
 }
 
-async fn sync() -> Result<(), String> {
-    service::sync().await.map_err(|err| {
+async fn sync(connection: DbConnection) -> Result<(), String> {
+    service::sync(connection).await.map_err(|err| {
         let score_error_msg = match err.downcast_ref::<ScoreError>() {
             Some(ScoreError::RuleFileNotFound) => {
                 error!("rule file not found");
@@ -474,18 +488,19 @@ async fn sync() -> Result<(), String> {
     })
 }
 
-async fn refresh() -> Result<Vec<Notification>> {
-    service::get_notifications().await
+async fn refresh(connection: DbConnection) -> Result<Vec<Notification>> {
+    service::get_notifications(connection).await
 }
 
 async fn update_score(
+    connection: DbConnection,
     idx: Option<usize>,
     notifications: &[Notification],
     modifier: i32,
 ) -> Result<(), String> {
     if let Some(idx) = idx {
         if let Some(notification) = notifications.get(idx) {
-            return match service::update_score(notification, modifier).await {
+            return match service::update_score(connection, notification, modifier).await {
                 Ok(_) => Ok(()),
                 Err(err) => {
                     error!("error in score update {:?}", err);

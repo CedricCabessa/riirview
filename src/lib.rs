@@ -6,10 +6,15 @@ pub mod score;
 pub mod service;
 pub mod tui;
 
-use diesel::prelude::*;
+use diesel::SqliteConnection;
+use diesel::connection::SimpleConnection;
+use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool, PooledConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
-pub fn establish_connection() -> SqliteConnection {
+type DbConnectionManager = ConnectionManager<SqliteConnection>;
+type DbConnection = PooledConnection<DbConnectionManager>;
+
+pub fn get_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
     let directories = dirs::Directories::new();
     let database_url = match dotenvy::var("DATABASE_URL") {
         Ok(val) => val,
@@ -18,8 +23,11 @@ pub fn establish_connection() -> SqliteConnection {
             db_path.to_str().unwrap().into()
         }
     };
-    SqliteConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+    let manager = ConnectionManager::new(database_url);
+    Pool::builder()
+        .connection_customizer(Box::new(ConnectionCustomizer {}))
+        .build(manager)
+        .expect("Could not build connection pool")
 }
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
@@ -27,4 +35,14 @@ const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 pub fn run_db_migrations(conn: &mut impl MigrationHarness<diesel::sqlite::Sqlite>) {
     conn.run_pending_migrations(MIGRATIONS)
         .expect("Could not run migrations");
+}
+
+#[derive(Debug)]
+struct ConnectionCustomizer {}
+
+impl CustomizeConnection<SqliteConnection, diesel::r2d2::Error> for ConnectionCustomizer {
+    fn on_acquire(&self, conn: &mut SqliteConnection) -> Result<(), diesel::r2d2::Error> {
+        conn.batch_execute("PRAGMA journal_mode = WAL;")
+            .map_err(diesel::r2d2::Error::QueryError)
+    }
 }
