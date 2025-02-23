@@ -1,15 +1,15 @@
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use chrono::{NaiveDateTime, Utc};
 use core::fmt;
-use futures::stream::iter;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use futures::stream::iter;
 use log::{debug, info};
 use regex::Regex;
-use reqwest::header::HeaderMap;
 use reqwest::Response;
 use reqwest::StatusCode;
+use reqwest::header::HeaderMap;
 use serde::Deserialize;
 use std::future::Future;
 use url::Url;
@@ -209,10 +209,9 @@ impl Client {
         info!("HEAD {} {:?}", &url, headers);
         let builder = self.client.head(&url).headers(self.headers.clone());
 
-        let builder = if let Some(custom_header) = headers {
-            builder.headers(custom_header)
-        } else {
-            builder
+        let builder = match headers {
+            Some(custom_header) => builder.headers(custom_header),
+            _ => builder,
         };
         let resp = builder.send().await?;
 
@@ -314,20 +313,23 @@ pub async fn fetch_notifications(last_update: Option<NaiveDateTime>) -> Result<V
     let client = Client::new()?;
     let resp = client.get_notifications(last_update).await?;
 
-    let mut notifications = if let Some(link) = resp.headers().get("link") {
-        let link = link.to_str()?;
-        let urls = pages_from_link(link)?;
+    let mut notifications = match resp.headers().get("link") {
+        Some(link) => {
+            let link = link.to_str()?;
+            let urls = pages_from_link(link)?;
 
-        iter(urls)
-            .map(get_notifications)
-            .buffer_unordered(NB_TASK)
-            .try_fold(vec![], |mut acc, x| async {
-                acc.extend(x);
-                Ok(acc)
-            })
-            .await?
-    } else {
-        vec![]
+            iter(urls)
+                .map(get_notifications)
+                .buffer_unordered(NB_TASK)
+                .try_fold(vec![], |mut acc, x| async {
+                    acc.extend(x);
+                    Ok(acc)
+                })
+                .await?
+        }
+        _ => {
+            vec![]
+        }
     };
 
     let res = resp.json::<Vec<Notification>>().await?;
@@ -466,9 +468,9 @@ mod tests {
         assert_eq!(
             pages_from_link(link).unwrap(),
             vec![
-		"https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=2",
-		"https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=3",
-		"https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=4"
+                "https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=2",
+                "https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=3",
+                "https://api.github.com/notifications?all=true&since=2023-11-06T00%3A00%3A00Z&page=4"
             ]
         );
     }

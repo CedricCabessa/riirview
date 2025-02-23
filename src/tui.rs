@@ -10,11 +10,11 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::*;
 use ratatui::widgets::{ListState, Paragraph};
 use ratatui::{
+    DefaultTerminal,
     layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::Color,
     text::Line,
     widgets::{Block, Clear, List},
-    DefaultTerminal,
 };
 use tokio::sync::mpsc;
 

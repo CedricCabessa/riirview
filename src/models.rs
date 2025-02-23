@@ -1,7 +1,7 @@
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel::{
-    backend::Backend, deserialize, serialize, sql_types::VarChar, AsExpression, FromSqlRow,
+    AsExpression, FromSqlRow, backend::Backend, deserialize, serialize, sql_types::VarChar,
 };
 
 #[derive(AsExpression, FromSqlRow, Debug, Clone)]

@@ -7,7 +7,7 @@ pub mod service;
 pub mod tui;
 
 use diesel::prelude::*;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
 pub fn establish_connection() -> SqliteConnection {
     let directories = dirs::Directories::new();
