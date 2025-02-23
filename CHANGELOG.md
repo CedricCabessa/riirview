@@ -1,5 +1,5 @@
-# unreleased
-## someday
+# 1.2.0
+## 2025-02-23
 
  - Explain scoring, keybinding "x"
  - Help, keybinding "?"
