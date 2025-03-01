@@ -279,7 +279,13 @@ async fn handle_action(
                 .expect("cannot send");
             res
         }
-        MessageAction::SyncBackground => sync(connection).await,
+        MessageAction::SyncBackground => {
+            let res = sync(connection).await;
+            tx.send(Message::Ui(MessageUi::Redraw))
+                .await
+                .expect("cannot send");
+            res
+        }
         MessageAction::Explain => match explain(idx, &notifications).await {
             Ok(explanation) => {
                 tx.send(Message::Ui(MessageUi::Popup(Popup {
