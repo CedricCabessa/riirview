@@ -545,7 +545,12 @@ async fn explain(idx: Option<usize>, notifications: &[Notification]) -> Result<S
 impl From<&Notification> for Text<'_> {
     fn from(notification: &Notification) -> Self {
         let icon = match notification.type_ {
-            NotificationType::Issue => "🐛",
+            NotificationType::Issue => match notification.state {
+                NotificationState::Open => "🐛",
+                NotificationState::Resolved => "🦋",
+                NotificationState::Canceled => "🪳",
+                NotificationState::Draft => unreachable!(),
+            },
             NotificationType::Release => "🚢",
             NotificationType::PullRequest => match notification.state {
                 NotificationState::Open => "📬",
