@@ -5,7 +5,7 @@ use core::fmt;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use futures::stream::iter;
-use log::{debug, info};
+use log::{debug, error, info};
 use regex::Regex;
 use reqwest::Response;
 use reqwest::StatusCode;
@@ -286,7 +286,15 @@ fn pages_from_link(link: &str) -> Result<Vec<String>> {
 async fn get_notifications(url: String) -> Result<Vec<Notification>> {
     let client = Client::new()?;
     let resp = client.get(url).await?;
-    Ok(resp.json::<Vec<Notification>>().await?)
+
+    let notifications = resp.json::<Vec<Notification>>().await;
+    match notifications {
+        Ok(notifications) => Ok(notifications),
+        Err(e) => {
+            error!("error get notifications: {}", e);
+            Ok(vec![])
+        }
+    }
 }
 
 async fn get_pr(url: String) -> Result<PullRequest> {
@@ -370,14 +378,22 @@ where
         })
         .collect();
 
-    iter(urls)
+    Ok(iter(urls)
         .map(getter)
         .buffer_unordered(NB_TASK)
-        .try_fold(vec![], |mut acc, x| async {
-            acc.push(x);
-            Ok(acc)
+        .fold(vec![], |mut acc, r| async {
+            match r {
+                Err(e) => {
+                    error!("error fetching object: {} type {:?}", e, notification_type);
+                    acc
+                }
+                Ok(v) => {
+                    acc.push(v);
+                    acc
+                }
+            }
         })
-        .await
+        .await)
 }
 
 pub async fn mark_as_done(id: &String) -> Result<()> {

@@ -489,7 +489,10 @@ async fn sync(connection: DbConnection) -> Result<(), String> {
         match (gh_error_msg, score_error_msg) {
             (Some(g), _) => g,
             (_, Some(s)) => s,
-            (None, None) => "cannot sync".into(),
+            (None, None) => {
+                error!("error in sync {:?}", err);
+                "cannot sync".into()
+            }
         }
     })
 }
