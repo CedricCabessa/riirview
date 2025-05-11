@@ -509,10 +509,10 @@ mod tests {
         file.read_to_string(&mut contents)?;
 
         let notifications: Vec<Notification> = serde_json::from_str(&contents)?;
-        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications.len(), 50);
 
-        let d = NaiveDate::from_ymd_opt(2025, 1, 19).unwrap();
-        let t = NaiveTime::from_hms_opt(8, 43, 54).unwrap();
+        let d = NaiveDate::from_ymd_opt(2025, 4, 5).unwrap();
+        let t = NaiveTime::from_hms_opt(9, 23, 12).unwrap();
 
         let expected = NaiveDateTime::new(d, t);
 
