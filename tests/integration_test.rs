@@ -124,4 +124,15 @@ async fn test_e2e() {
     let notification = notifications.get(0).unwrap();
     assert_eq!(notification.id, first_id);
     assert_eq!(notification.score_boost, 10); // updated
+
+    // resync
+    service::sync(pool.get().unwrap()).await.unwrap();
+
+    let notifications = service::get_notifications(pool.get().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(notifications.len(), 50);
+    let notification = notifications.get(0).unwrap();
+    assert_eq!(notification.id, first_id);
+    assert_eq!(notification.score_boost, 10);
 }
