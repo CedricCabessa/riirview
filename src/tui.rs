@@ -527,20 +527,28 @@ async fn explain(idx: Option<usize>, notifications: &[Notification]) -> Result<S
             let res = service::explain(notification)
                 .await
                 .or(Err(String::from("explain failed")))?;
-            if res.is_empty() {
-                return Ok("\nThis notification doesn't match any rule".to_string());
-            } else {
-                let explanation = res.iter().fold(String::new(), |acc, rule| {
-                    format!("{acc}\nrule:{} score:{}", rule.name, rule.score)
-                });
-                let explanation = if notification.score_boost != 0 {
-                    format!("{explanation}\n\nmanual boost:{}", notification.score_boost)
+
+            let explanation = res.iter().fold(String::new(), |acc, rule| {
+                let prefix = if acc.is_empty() {
+                    String::from("\n")
                 } else {
-                    explanation
+                    acc
                 };
-                return Ok(explanation);
-            }
-        }
+                format!("{prefix}rule:{} score:{}\n", rule.name, rule.score)
+            });
+            let explanation = if notification.score_boost != 0 {
+                format!("{explanation}\nmanual boost:{}", notification.score_boost)
+            } else {
+                explanation
+            };
+            let explanation = if explanation.is_empty() {
+                "\nThis notification doesn't match any rule".to_string()
+            } else {
+                explanation
+            };
+
+            return Ok(explanation);
+        };
     }
     Ok(String::new())
 }
