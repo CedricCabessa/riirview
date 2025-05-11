@@ -8,7 +8,6 @@ use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::update;
-use diesel::upsert::excluded;
 use gh::UpdateStatus;
 use log::{debug, error, info};
 use models::NotificationState;
@@ -124,9 +123,17 @@ pub async fn sync(mut connection: DbConnection) -> Result<()> {
             .on_conflict(id)
             .do_update()
             .set((
-                &db_notification,
-                score_boost.eq(excluded(score_boost)),
+                reason.eq(&db_notification.reason),
+                title.eq(&db_notification.title),
+                unread.eq(db_notification.unread),
+                repo.eq(&db_notification.repo),
+                updated_at.eq(db_notification.updated_at),
                 done.eq(false),
+                score.eq(db_notification.score),
+                url.eq(&db_notification.url),
+                type_.eq(&db_notification.type_),
+                author.eq(&db_notification.author),
+                state.eq(&db_notification.state),
             ))
             .execute(&mut connection);
         if res.is_err() {
