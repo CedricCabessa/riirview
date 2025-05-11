@@ -1,3 +1,4 @@
+pub mod config;
 pub mod dirs;
 pub mod gh;
 pub mod models;
@@ -6,6 +7,7 @@ pub mod score;
 pub mod service;
 pub mod tui;
 
+use crate::config::Config;
 use diesel::SqliteConnection;
 use diesel::connection::SimpleConnection;
 use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool, PooledConnection};
@@ -15,14 +17,7 @@ type DbConnectionManager = ConnectionManager<SqliteConnection>;
 type DbConnection = PooledConnection<DbConnectionManager>;
 
 pub fn get_connection_pool() -> Pool<ConnectionManager<SqliteConnection>> {
-    let directories = dirs::Directories::new();
-    let database_url = match dotenvy::var("DATABASE_URL") {
-        Ok(val) => val,
-        Err(_) => {
-            let db_path = directories.data.join("riirview.db");
-            db_path.to_str().unwrap().into()
-        }
-    };
+    let database_url = Config::get().db_path;
     let manager = ConnectionManager::new(database_url);
     Pool::builder()
         .connection_customizer(Box::new(ConnectionCustomizer {}))

@@ -1,3 +1,4 @@
+use crate::config::Config;
 use anyhow::Result;
 use anyhow::anyhow;
 use chrono::{NaiveDateTime, Utc};
@@ -120,8 +121,9 @@ impl Client {
             format!("Bearer {}", token).parse().unwrap(),
         );
 
+        let config = Config::get();
         Ok(Client {
-            base_url: "https://api.github.com".into(),
+            base_url: config.github_base_url,
             headers,
             client,
         })
@@ -170,6 +172,7 @@ impl Client {
     }
 
     pub async fn get(&self, url: String) -> Result<Response> {
+        let url = Config::get().rewrite_url(&url);
         info!("GET {}", &url);
         let resp = self
             .client
@@ -182,6 +185,7 @@ impl Client {
     }
 
     async fn del(&self, url: String) -> Result<Response> {
+        let url = Config::get().rewrite_url(&url);
         info!("DEL {}", &url);
         let resp = self
             .client
@@ -194,6 +198,7 @@ impl Client {
     }
 
     async fn patch(&self, url: String) -> Result<Response> {
+        let url = Config::get().rewrite_url(&url);
         info!("PATCH {}", &url);
         let resp = self
             .client
@@ -206,6 +211,7 @@ impl Client {
     }
 
     async fn head(&self, url: String, headers: Option<HeaderMap>) -> Result<Response> {
+        let url = Config::get().rewrite_url(&url);
         info!("HEAD {} {:?}", &url, headers);
         let builder = self.client.head(&url).headers(self.headers.clone());
 

@@ -31,8 +31,8 @@ pub async fn sync(mut connection: DbConnection) -> Result<()> {
     );
     let (gh_prs, gh_releases, gh_issues) = (gh_prs?, gh_releases?, gh_issues?);
 
-    let directories = dirs::Directories::new();
-    let scorer = Scorer::new(directories.config.join("rules.toml"))?;
+    let config = Config::get();
+    let scorer = Scorer::new(config.rules_path)?;
 
     info!("inserting {} notifications", gh_notifications.len());
     for gh_notification in gh_notifications {
