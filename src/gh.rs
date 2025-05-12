@@ -149,7 +149,10 @@ impl Client {
 
     pub async fn mark_notification_done(&self, id: &String) -> Result<()> {
         let url = format!("{}/notifications/threads/{}", self.base_url, id);
-        self.del(url).await?;
+        let res = self.del(url).await;
+        if res.is_err() {
+            error!("error deleting notification: {}", res.unwrap_err());
+        }
         Ok(())
     }
 
