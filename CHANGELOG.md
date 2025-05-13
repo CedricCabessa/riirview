@@ -1,3 +1,12 @@
+# 1.3.0
+## 2025-05-13
+
+ - add icons for bug open/resolved/cancel
+ - don't stop sync and mark as read in case of http error
+ - add integration tests
+ - fix score boost lost after sync
+ - fix explain if score boost but no rules
+
 # 1.2.1
 ## 2025-03-13
 
