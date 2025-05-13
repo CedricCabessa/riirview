@@ -1,12 +1,15 @@
 use riirview::config::Config;
 use riirview::service;
 use riirview::{get_connection_pool, run_db_migrations};
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use tempfile::NamedTempFile;
 
 #[tokio::test]
 async fn test_e2e() {
+    unsafe { env::set_var("GH_TOKEN", "faketoken") };
+
     let mut server = mockito::Server::new_async().await;
     let server_url = server.url();
 

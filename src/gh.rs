@@ -282,7 +282,7 @@ fn pages_from_link(link: &str) -> Result<Vec<String>> {
                 .extend_pairs(query)
                 .extend_pairs([("page", format!("{}", page))]);
 
-            debug!("add url {}", new_url.to_string());
+            debug!("add url {}", new_url);
 
             urls.push(new_url.to_string());
         }

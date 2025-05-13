@@ -139,7 +139,7 @@ pub async fn sync(mut connection: DbConnection) -> Result<()> {
         if res.is_err() {
             error!(
                 "insert err {} {:?}",
-                res.expect_err("no error").to_string(),
+                res.expect_err("no error"),
                 db_notification
             )
         }
