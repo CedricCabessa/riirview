@@ -103,9 +103,9 @@ async fn test_e2e() {
         })
         .create();
 
-    service::sync(pool.get().unwrap()).await.unwrap();
+    service::sync(&mut pool.get().unwrap()).await.unwrap();
 
-    let notifications = service::get_notifications(pool.get().unwrap())
+    let notifications = service::get_notifications(&mut pool.get().unwrap())
         .await
         .unwrap();
     assert_eq!(notifications.len(), 50);
@@ -116,12 +116,12 @@ async fn test_e2e() {
 
     let notification = notifications.get(0).unwrap();
     let first_id = notification.id.clone();
-    service::update_score(pool.clone().get().unwrap(), notification, 10)
+    service::update_score(&mut pool.clone().get().unwrap(), notification, 10)
         .await
         .unwrap();
     assert_eq!(notification.score_boost, 0); // not updated yet
 
-    let notifications = service::get_notifications(pool.get().unwrap())
+    let notifications = service::get_notifications(&mut pool.get().unwrap())
         .await
         .unwrap();
     let notification = notifications.get(0).unwrap();
@@ -129,9 +129,9 @@ async fn test_e2e() {
     assert_eq!(notification.score_boost, 10); // updated
 
     // resync
-    service::sync(pool.get().unwrap()).await.unwrap();
+    service::sync(&mut pool.get().unwrap()).await.unwrap();
 
-    let notifications = service::get_notifications(pool.get().unwrap())
+    let notifications = service::get_notifications(&mut pool.get().unwrap())
         .await
         .unwrap();
     assert_eq!(notifications.len(), 50);

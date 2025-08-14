@@ -44,6 +44,7 @@ enum MessageAction {
 enum MessageUi {
     MoveUp(u16),
     MoveDown(u16),
+    MoveTo(usize),
     UiUpdate(UiState),
     Popup(Popup),
     Redraw,
@@ -242,6 +243,10 @@ impl App {
                 list_state.scroll_down_by(mov);
                 self.state.reset();
             }
+            MessageUi::MoveTo(pos) => {
+                list_state.select(Some(pos));
+                self.state.reset();
+            }
             MessageUi::Redraw => self.state.reset(),
             MessageUi::Popup(popup) => {
                 self.popup = Some(popup);
@@ -286,7 +291,23 @@ async fn handle_action(
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
-            res
+            match res {
+                Ok(maybenotif) => {
+                    if let Some(notification) = maybenotif {
+                        let new_pos = refresh(&mut connection)
+                            .await
+                            .unwrap()
+                            .iter()
+                            .position(|it| it.id == notification.id)
+                            .unwrap();
+                        tx.send(Message::Ui(MessageUi::MoveTo(new_pos)))
+                            .await
+                            .expect("cannot send");
+                    }
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }
         }
         MessageAction::MarkAsDone => {
             let res = mark_as_done(&mut connection, idx, &notifications).await;
@@ -581,11 +602,11 @@ async fn update_score(
     idx: Option<usize>,
     notifications: &[Notification],
     modifier: i32,
-) -> Result<(), String> {
+) -> Result<Option<Notification>, String> {
     if let Some(idx) = idx {
         if let Some(notification) = notifications.get(idx) {
             return match service::update_score(connection, notification, modifier).await {
-                Ok(_) => Ok(()),
+                Ok(_) => Ok(Some(notification.clone())),
                 Err(err) => {
                     error!("error in score update {:?}", err);
                     Err("cannot update score".into())
@@ -593,7 +614,7 @@ async fn update_score(
             };
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 async fn explain(idx: Option<usize>, notifications: &[Notification]) -> Result<String, String> {
