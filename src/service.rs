@@ -18,8 +18,8 @@ pub async fn check_update_and_limit(mut connection: DbConnection) -> Result<Upda
     gh::check_update_and_limit(last_update).await
 }
 
-pub async fn sync(mut connection: DbConnection) -> Result<()> {
-    let last_update = get_recent_update(&mut connection);
+pub async fn sync(connection: &mut DbConnection) -> Result<()> {
+    let last_update = get_recent_update(connection);
 
     let gh_notifications = gh::fetch_notifications(last_update).await?;
 
@@ -135,7 +135,7 @@ pub async fn sync(mut connection: DbConnection) -> Result<()> {
                 author.eq(&db_notification.author),
                 state.eq(&db_notification.state),
             ))
-            .execute(&mut connection);
+            .execute(connection);
         if res.is_err() {
             error!(
                 "insert err {} {:?}",
@@ -147,27 +147,27 @@ pub async fn sync(mut connection: DbConnection) -> Result<()> {
     Ok(())
 }
 
-pub async fn get_notifications(mut connection: DbConnection) -> Result<Vec<DBNotification>> {
+pub async fn get_notifications(connection: &mut DbConnection) -> Result<Vec<DBNotification>> {
     Ok(notifications
         .select(DBNotification::as_select())
         .filter(done.eq(false))
         .order_by(((score + score_boost).desc(), updated_at.desc()))
-        .load(&mut connection)?)
+        .load(connection)?)
 }
 
 pub async fn mark_notification_as_done(
-    mut connection: DbConnection,
+    connection: &mut DbConnection,
     notification: &DBNotification,
 ) -> Result<()> {
     gh::mark_as_done(&notification.id).await?;
     update(notification)
         .set(done.eq(true))
-        .execute(&mut connection)?;
+        .execute(connection)?;
     Ok(())
 }
 
 pub async fn mark_notifications_as_done(
-    mut connection: DbConnection,
+    connection: &mut DbConnection,
     notifs: &Vec<&DBNotification>,
 ) -> Result<()> {
     let ids = notifs.iter().map(|n| n.id.clone()).collect();
@@ -175,29 +175,29 @@ pub async fn mark_notifications_as_done(
     update(notifications)
         .filter(id.eq_any(ids))
         .set(done.eq(true))
-        .execute(&mut connection)?;
+        .execute(connection)?;
     Ok(())
 }
 
 pub async fn mark_notification_as_read(
-    mut connection: DbConnection,
+    connection: &mut DbConnection,
     notification: &DBNotification,
 ) -> Result<()> {
     gh::mark_as_read(&notification.id).await?;
     update(notification)
         .set(unread.eq(false))
-        .execute(&mut connection)?;
+        .execute(connection)?;
     Ok(())
 }
 
 pub async fn update_score(
-    mut connection: DbConnection,
+    connection: &mut DbConnection,
     notification: &DBNotification,
     modifier: i32,
 ) -> Result<()> {
     update(notification)
         .set(score_boost.eq(notification.score_boost + modifier))
-        .execute(&mut connection)?;
+        .execute(connection)?;
     Ok(())
 }
 

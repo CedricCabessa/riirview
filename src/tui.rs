@@ -122,7 +122,7 @@ impl App {
         let (tx, mut rx) = mpsc::channel::<Message>(32);
         let pool = get_connection_pool();
 
-        let notifications = refresh(pool.clone().get()?).await?;
+        let notifications = refresh(&mut pool.clone().get()?).await?;
         self.update_ui(
             MessageUi::UiUpdate(UiState::default()),
             &mut terminal,
@@ -141,7 +141,7 @@ impl App {
             if let Some(message) = maybe_message {
                 // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
                 // it should be done only after a change in the list
-                let notifications = refresh(pool.clone().get()?).await?;
+                let notifications = refresh(&mut pool.clone().get()?).await?;
 
                 if self.popup.is_some() {
                     self.popup = None;
@@ -274,7 +274,7 @@ impl App {
 
 async fn handle_action(
     tx: mpsc::Sender<Message>,
-    connection: DbConnection,
+    mut connection: DbConnection,
     message: MessageAction,
     idx: Option<usize>,
     notifications: Vec<Notification>,
@@ -282,14 +282,14 @@ async fn handle_action(
     debug!("handle_message {message:?}");
     let res = match message {
         MessageAction::ScoreIncrement(inc) => {
-            let res = update_score(connection, idx, &notifications, inc).await;
+            let res = update_score(&mut connection, idx, &notifications, inc).await;
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
             res
         }
         MessageAction::MarkAsDone => {
-            let res = mark_as_done(connection, idx, &notifications).await;
+            let res = mark_as_done(&mut connection, idx, &notifications).await;
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
@@ -302,7 +302,7 @@ async fn handle_action(
             .await
             .expect("cannot send");
 
-            let res = mark_all_below_as_done(connection, idx, &notifications).await;
+            let res = mark_all_below_as_done(&mut connection, idx, &notifications).await;
 
             tx.send(Message::Ui(MessageUi::UiUpdate(UiState::info_msg(
                 "mark as read complete".into(),
@@ -313,7 +313,7 @@ async fn handle_action(
             res
         }
         MessageAction::Open => {
-            let res = open_gh(connection, idx, &notifications).await;
+            let res = open_gh(&mut connection, idx, &notifications).await;
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
@@ -326,7 +326,7 @@ async fn handle_action(
             .await
             .expect("cannot send");
 
-            let res = sync(connection).await;
+            let res = sync(&mut connection).await;
 
             tx.send(Message::Ui(MessageUi::UiUpdate(UiState::info_msg(
                 String::new(),
@@ -343,7 +343,7 @@ async fn handle_action(
             .await
             .expect("cannot send");
 
-            let res = sync(connection).await;
+            let res = sync(&mut connection).await;
 
             tx.send(Message::Ui(MessageUi::UiUpdate(UiState::default())))
                 .await
@@ -463,7 +463,7 @@ fn popup_area(area: Rect, lines: u16, columns: u16) -> Rect {
 }
 
 async fn open_gh(
-    connection: DbConnection,
+    connection: &mut DbConnection,
     idx: Option<usize>,
     notifications: &[Notification],
 ) -> Result<(), String> {
@@ -485,7 +485,7 @@ async fn open_gh(
 }
 
 async fn mark_as_done(
-    connection: DbConnection,
+    connection: &mut DbConnection,
     idx: Option<usize>,
     notifications: &[Notification],
 ) -> Result<(), String> {
@@ -504,7 +504,7 @@ async fn mark_as_done(
 }
 
 async fn mark_all_below_as_done(
-    connection: DbConnection,
+    connection: &mut DbConnection,
     idx: Option<usize>,
     notifications: &[Notification],
 ) -> Result<(), String> {
@@ -522,7 +522,10 @@ async fn mark_all_below_as_done(
     Ok(())
 }
 
-async fn mark_as_read(connection: DbConnection, notification: &Notification) -> Result<(), String> {
+async fn mark_as_read(
+    connection: &mut DbConnection,
+    notification: &Notification,
+) -> Result<(), String> {
     match service::mark_notification_as_read(connection, notification).await {
         Err(e) => {
             error!("{e}");
@@ -532,7 +535,7 @@ async fn mark_as_read(connection: DbConnection, notification: &Notification) -> 
     }
 }
 
-async fn sync(connection: DbConnection) -> Result<(), String> {
+async fn sync(connection: &mut DbConnection) -> Result<(), String> {
     service::sync(connection).await.map_err(|err| {
         let score_error_msg = match err.downcast_ref::<ScoreError>() {
             Some(ScoreError::RuleFileNotFound) => {
@@ -569,12 +572,12 @@ async fn sync(connection: DbConnection) -> Result<(), String> {
     })
 }
 
-async fn refresh(connection: DbConnection) -> Result<Vec<Notification>> {
+async fn refresh(connection: &mut DbConnection) -> Result<Vec<Notification>> {
     service::get_notifications(connection).await
 }
 
 async fn update_score(
-    connection: DbConnection,
+    connection: &mut DbConnection,
     idx: Option<usize>,
     notifications: &[Notification],
     modifier: i32,
