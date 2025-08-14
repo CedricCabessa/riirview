@@ -44,20 +44,48 @@ enum MessageAction {
 enum MessageUi {
     MoveUp(u16),
     MoveDown(u16),
-    Error(String),
-    Info(String),
+    UiUpdate(UiState),
     Popup(Popup),
     Redraw,
 }
 
-enum Headline {
-    Info(String),
-    Error(String),
+#[derive(Clone, PartialEq, Debug, Default)]
+struct UiState {
+    info: String,
+    error: String,
+    loading: bool,
 }
 
-impl Default for Headline {
-    fn default() -> Self {
-        Headline::Info("".into())
+impl UiState {
+    fn reset(&mut self) {
+        if !self.loading {
+            self.info.clear();
+            self.error.clear();
+        }
+    }
+
+    fn info_msg(message: String) -> Self {
+        UiState {
+            info: message,
+            error: String::new(),
+            loading: false,
+        }
+    }
+
+    fn loading_msg(message: String) -> Self {
+        UiState {
+            info: message,
+            error: String::new(),
+            loading: true,
+        }
+    }
+
+    fn error_msg(message: String) -> Self {
+        UiState {
+            info: String::new(),
+            error: message,
+            loading: false,
+        }
     }
 }
 
@@ -81,7 +109,7 @@ pub async fn run() -> Result<()> {
 
 #[derive(Default)]
 struct App {
-    headline: Headline,
+    state: UiState,
     popup: Option<Popup>,
 }
 
@@ -95,7 +123,13 @@ impl App {
         let pool = get_connection_pool();
 
         let notifications = refresh(pool.clone().get()?).await?;
-        terminal.draw(|frame| self.draw(frame, &notifications, &mut list_state))?;
+        self.update_ui(
+            MessageUi::UiUpdate(UiState::default()),
+            &mut terminal,
+            &mut list_state,
+            &notifications,
+        )
+        .await?;
 
         let tx_cloned = tx.clone();
         let notif_handle = tokio::spawn(auto_sync_notifs_loop(tx.clone(), pool.clone()));
@@ -155,16 +189,11 @@ impl App {
         frame: &mut Frame,
         notifications: &Vec<Notification>,
         list_state: &mut ListState,
+        status: Result<String, String>,
     ) {
-        let status = match &self.headline {
-            Headline::Info(info) => {
-                if info.is_empty() {
-                    Span::raw(format!("Riirview, {} notifs", notifications.len()))
-                } else {
-                    Span::raw(info.to_string())
-                }
-            }
-            Headline::Error(error) => Span::raw(error.clone()).style(Color::Red),
+        let status = match status {
+            Ok(msg) => Span::raw(msg),
+            Err(err) => Span::styled(err, Style::default().fg(Color::Red)),
         };
 
         let head = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]);
@@ -207,22 +236,38 @@ impl App {
         match message {
             MessageUi::MoveUp(mov) => {
                 list_state.scroll_up_by(mov);
-                self.headline = Headline::default();
+                self.state.reset();
             }
             MessageUi::MoveDown(mov) => {
                 list_state.scroll_down_by(mov);
-                self.headline = Headline::default();
+                self.state.reset();
             }
-            MessageUi::Error(err) => self.headline = Headline::Error(err),
-            MessageUi::Info(info) => self.headline = Headline::Info(info),
-            MessageUi::Redraw => self.headline = Headline::default(),
+            MessageUi::Redraw => self.state.reset(),
             MessageUi::Popup(popup) => {
                 self.popup = Some(popup);
-                self.headline = Headline::default();
+                self.state.reset()
+            }
+            MessageUi::UiUpdate(update) => {
+                self.state = update;
             }
         };
 
-        terminal.draw(|frame| self.draw(frame, notifications, list_state))?;
+        let headline = if !self.state.error.is_empty() {
+            Err(self.state.error.clone())
+        } else {
+            let info = if self.state.info.is_empty() {
+                format!("Riirview, {} notifs", notifications.len())
+            } else {
+                self.state.info.clone()
+            };
+            if self.state.loading {
+                Ok(format!("{} ⌛", info))
+            } else {
+                Ok(info)
+            }
+        };
+
+        terminal.draw(|frame| self.draw(frame, notifications, list_state, headline))?;
         Ok(())
     }
 }
@@ -251,13 +296,20 @@ async fn handle_action(
             res
         }
         MessageAction::MarkBelowAsDone => {
-            tx.send(Message::Ui(MessageUi::Info("mark as read...".into())))
-                .await
-                .expect("cannot send");
+            tx.send(Message::Ui(MessageUi::UiUpdate(UiState::loading_msg(
+                "mark as read...".into(),
+            ))))
+            .await
+            .expect("cannot send");
+
             let res = mark_all_below_as_done(connection, idx, &notifications).await;
-            tx.send(Message::Ui(MessageUi::Info("mark as read complete".into())))
-                .await
-                .expect("cannot send");
+
+            tx.send(Message::Ui(MessageUi::UiUpdate(UiState::info_msg(
+                "mark as read complete".into(),
+            ))))
+            .await
+            .expect("cannot send");
+
             res
         }
         MessageAction::Open => {
@@ -268,19 +320,35 @@ async fn handle_action(
             res
         }
         MessageAction::Sync => {
-            tx.send(Message::Ui(MessageUi::Info("syncing...".into())))
-                .await
-                .expect("cannot send");
+            tx.send(Message::Ui(MessageUi::UiUpdate(UiState::loading_msg(
+                String::new(),
+            ))))
+            .await
+            .expect("cannot send");
 
             let res = sync(connection).await;
 
-            tx.send(Message::Ui(MessageUi::Info("sync done".into())))
-                .await
-                .expect("cannot send");
+            tx.send(Message::Ui(MessageUi::UiUpdate(UiState::info_msg(
+                String::new(),
+            ))))
+            .await
+            .expect("cannot send");
+
             res
         }
         MessageAction::SyncBackground => {
+            tx.send(Message::Ui(MessageUi::UiUpdate(UiState::loading_msg(
+                String::new(),
+            ))))
+            .await
+            .expect("cannot send");
+
             let res = sync(connection).await;
+
+            tx.send(Message::Ui(MessageUi::UiUpdate(UiState::default())))
+                .await
+                .expect("cannot send");
+
             tx.send(Message::Ui(MessageUi::Redraw))
                 .await
                 .expect("cannot send");
@@ -311,7 +379,9 @@ async fn handle_action(
     };
 
     if let Err(err) = res {
-        _ = tx.send(Message::Ui(MessageUi::Error(err))).await;
+        _ = tx
+            .send(Message::Ui(MessageUi::UiUpdate(UiState::error_msg(err))))
+            .await;
     }
 }
 
@@ -319,8 +389,10 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
     loop {
         let event = event::read();
         if let Err(err) = event {
-            tx.blocking_send(Message::Ui(MessageUi::Error(err.to_string())))
-                .expect("cannot send");
+            tx.blocking_send(Message::Ui(MessageUi::UiUpdate(UiState::error_msg(
+                err.to_string(),
+            ))))
+            .expect("cannot send");
             return;
         }
 
