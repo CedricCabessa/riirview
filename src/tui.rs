@@ -47,6 +47,10 @@ enum MessageUi {
     MoveTo(usize),
     UiUpdate(UiState),
     Popup(Popup),
+    SearchActivate,
+    SearchInput(char),
+    SearchBackspace,
+    SearchQuit,
     Redraw,
 }
 
@@ -108,10 +112,18 @@ pub async fn run() -> Result<()> {
     res
 }
 
+#[derive(Default, Clone, PartialEq)]
+enum InputMode {
+    #[default]
+    Normal,
+    Search,
+}
+
 #[derive(Default)]
 struct App {
     state: UiState,
     popup: Option<Popup>,
+    input: String,
 }
 
 impl App {
@@ -123,7 +135,7 @@ impl App {
         let (tx, mut rx) = mpsc::channel::<Message>(32);
         let pool = get_connection_pool();
 
-        let notifications = refresh(&mut pool.clone().get()?).await?;
+        let notifications = refresh(&mut pool.clone().get()?, &String::new()).await?;
         self.update_ui(
             MessageUi::UiUpdate(UiState::default()),
             &mut terminal,
@@ -142,7 +154,8 @@ impl App {
             if let Some(message) = maybe_message {
                 // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
                 // it should be done only after a change in the list
-                let notifications = refresh(&mut pool.clone().get()?).await?;
+
+                let notifications = refresh(&mut pool.clone().get()?, &self.input).await?;
 
                 if self.popup.is_some() {
                     self.popup = None;
@@ -205,8 +218,19 @@ impl App {
             help_rect,
         );
 
-        let layout_v = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).spacing(1);
-        let [_, main_area] = layout_v.areas(frame.area());
+        // TODO: make input appear / disappear with "/"
+        let layout_v = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .spacing(1);
+        let [_, input_area, main_area] = layout_v.areas(frame.area());
+
+        frame.render_widget(
+            Line::from(self.input.clone()).alignment(Alignment::Left),
+            input_area,
+        );
 
         let list = List::new(notifications).highlight_style(Modifier::REVERSED);
         frame.render_stateful_widget(list, main_area, list_state);
@@ -255,6 +279,20 @@ impl App {
             MessageUi::UiUpdate(update) => {
                 self.state = update;
             }
+            MessageUi::SearchActivate => {
+                self.state.reset();
+            }
+            MessageUi::SearchInput(c) => {
+                self.input.push(c);
+                self.state.reset();
+            }
+            MessageUi::SearchBackspace => {
+                self.input.pop();
+            }
+            MessageUi::SearchQuit => {
+                self.input.clear();
+                self.state.reset();
+            }
         };
 
         let headline = if !self.state.error.is_empty() {
@@ -294,7 +332,7 @@ async fn handle_action(
             match res {
                 Ok(maybenotif) => {
                     if let Some(notification) = maybenotif {
-                        let new_pos = refresh(&mut connection)
+                        let new_pos = refresh(&mut connection, &String::new()) // FIXME: probably bug if + during a narrow query
                             .await
                             .unwrap()
                             .iter()
@@ -407,6 +445,7 @@ async fn handle_action(
 }
 
 fn handle_input_loop(tx: mpsc::Sender<Message>) {
+    let mut input_mode = InputMode::Normal;
     loop {
         let event = event::read();
         if let Err(err) = event {
@@ -418,21 +457,54 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
         }
 
         if let Ok(Event::Key(key)) = event {
-            let message = match key.code {
-                KeyCode::Down => Message::Ui(MessageUi::MoveDown(1)),
-                KeyCode::PageDown => Message::Ui(MessageUi::MoveDown(10)),
-                KeyCode::Up => Message::Ui(MessageUi::MoveUp(1)),
-                KeyCode::PageUp => Message::Ui(MessageUi::MoveUp(10)),
-                KeyCode::Char('q') => Message::Action(MessageAction::Quit),
-                KeyCode::Char('+') => Message::Action(MessageAction::ScoreIncrement(10)),
-                KeyCode::Char('-') => Message::Action(MessageAction::ScoreIncrement(-10)),
-                KeyCode::Enter => Message::Action(MessageAction::Open),
-                KeyCode::Char('r') => Message::Action(MessageAction::MarkAsDone),
-                KeyCode::Char('R') => Message::Action(MessageAction::MarkBelowAsDone),
-                KeyCode::Char('g') => Message::Action(MessageAction::Sync),
-                KeyCode::Char('x') => Message::Action(MessageAction::Explain),
-                KeyCode::Char('?') => Message::Action(MessageAction::Help),
-                _ => Message::Noop,
+            let message = match input_mode {
+                InputMode::Normal => {
+                    match key.code {
+                        KeyCode::Down => Message::Ui(MessageUi::MoveDown(1)),
+                        KeyCode::PageDown => Message::Ui(MessageUi::MoveDown(10)),
+                        KeyCode::Up => Message::Ui(MessageUi::MoveUp(1)),
+                        KeyCode::PageUp => Message::Ui(MessageUi::MoveUp(10)),
+                        KeyCode::Char('/') => {
+                            input_mode = InputMode::Search;
+                            Message::Ui(MessageUi::SearchActivate)
+                        }
+                        KeyCode::Esc => {
+                            //needs 2 messages
+                            tx.blocking_send(Message::Ui(MessageUi::SearchQuit))
+                                .expect("cannot send message");
+                            Message::Ui(MessageUi::Redraw)
+                        }
+                        KeyCode::Char('q') => Message::Action(MessageAction::Quit),
+                        KeyCode::Char('+') => Message::Action(MessageAction::ScoreIncrement(10)),
+                        KeyCode::Char('-') => Message::Action(MessageAction::ScoreIncrement(-10)),
+                        KeyCode::Enter => Message::Action(MessageAction::Open),
+                        KeyCode::Char('r') => Message::Action(MessageAction::MarkAsDone),
+                        KeyCode::Char('R') => Message::Action(MessageAction::MarkBelowAsDone),
+                        KeyCode::Char('g') => Message::Action(MessageAction::Sync),
+                        KeyCode::Char('x') => Message::Action(MessageAction::Explain),
+                        KeyCode::Char('?') => Message::Action(MessageAction::Help),
+                        _ => Message::Noop,
+                    }
+                }
+                InputMode::Search => {
+                    match key.code {
+                        KeyCode::Enter => {
+                            input_mode = InputMode::Normal;
+                            Message::Noop
+                            //Message::Ui(MessageUi::SearchValidate)
+                        }
+                        KeyCode::Backspace => Message::Ui(MessageUi::SearchBackspace),
+                        KeyCode::Char(c) => Message::Ui(MessageUi::SearchInput(c)),
+                        KeyCode::Esc => {
+                            input_mode = InputMode::Normal;
+                            //needs 2 messages
+                            tx.blocking_send(Message::Ui(MessageUi::SearchQuit))
+                                .expect("cannot send message");
+                            Message::Ui(MessageUi::Redraw)
+                        }
+                        _ => Message::Noop,
+                    }
+                }
             };
 
             // send message, it will be executed if popup is inactive
@@ -593,8 +665,8 @@ async fn sync(connection: &mut DbConnection) -> Result<(), String> {
     })
 }
 
-async fn refresh(connection: &mut DbConnection) -> Result<Vec<Notification>> {
-    service::get_notifications(connection).await
+async fn refresh(connection: &mut DbConnection, query: &String) -> Result<Vec<Notification>> {
+    service::get_notifications(connection, query).await
 }
 
 async fn update_score(

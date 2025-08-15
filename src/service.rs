@@ -147,10 +147,14 @@ pub async fn sync(connection: &mut DbConnection) -> Result<()> {
     Ok(())
 }
 
-pub async fn get_notifications(connection: &mut DbConnection) -> Result<Vec<DBNotification>> {
+pub async fn get_notifications(
+    connection: &mut DbConnection,
+    query: &String,
+) -> Result<Vec<DBNotification>> {
     Ok(notifications
         .select(DBNotification::as_select())
         .filter(done.eq(false))
+        .filter(title.like(format!("%{}%", query))) // ilike on sqlite
         .order_by(((score + score_boost).desc(), updated_at.desc()))
         .load(connection)?)
 }
