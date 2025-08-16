@@ -181,6 +181,7 @@ impl App {
                             message_action,
                             list_state.selected(),
                             notifications,
+                            self.input.clone(),
                         ));
                     }
                     Message::Ui(ui) => {
@@ -321,6 +322,7 @@ async fn handle_action(
     message: MessageAction,
     idx: Option<usize>,
     notifications: Vec<Notification>,
+    query: String,
 ) {
     debug!("handle_message {message:?}");
     let res = match message {
@@ -332,7 +334,7 @@ async fn handle_action(
             match res {
                 Ok(maybenotif) => {
                     if let Some(notification) = maybenotif {
-                        let new_pos = refresh(&mut connection, &String::new()) // FIXME: probably bug if + during a narrow query
+                        let new_pos = refresh(&mut connection, &query)
                             .await
                             .unwrap()
                             .iter()
