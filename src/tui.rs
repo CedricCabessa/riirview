@@ -124,6 +124,7 @@ struct App {
     state: UiState,
     popup: Option<Popup>,
     input: String,
+    input_mode: InputMode,
 }
 
 impl App {
@@ -219,19 +220,25 @@ impl App {
             help_rect,
         );
 
-        // TODO: make input appear / disappear with "/"
-        let layout_v = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Fill(1),
-        ])
-        .spacing(1);
-        let [_, input_area, main_area] = layout_v.areas(frame.area());
-
-        frame.render_widget(
-            Line::from(self.input.clone()).alignment(Alignment::Left),
-            input_area,
-        );
+        let main_area = if self.input_mode == InputMode::Search {
+            let layout_v = Layout::vertical([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Fill(1),
+            ])
+            .spacing(1);
+            let [_, input_area, main_area] = layout_v.areas(frame.area());
+            frame.render_widget(
+                Line::from(format!("🐕> {}", self.input.clone())).alignment(Alignment::Left),
+                input_area,
+            );
+            main_area
+        } else {
+            let layout_v =
+                Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).spacing(1);
+            let [_, main_area] = layout_v.areas(frame.area());
+            main_area
+        };
 
         let list = List::new(notifications).highlight_style(Modifier::REVERSED);
         frame.render_stateful_widget(list, main_area, list_state);
@@ -282,6 +289,7 @@ impl App {
             }
             MessageUi::SearchActivate => {
                 self.state.reset();
+                self.input_mode = InputMode::Search;
             }
             MessageUi::SearchInput(c) => {
                 self.input.push(c);
@@ -293,6 +301,7 @@ impl App {
             MessageUi::SearchQuit => {
                 self.input.clear();
                 self.state.reset();
+                self.input_mode = InputMode::Normal;
             }
         };
 
