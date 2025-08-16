@@ -8,6 +8,7 @@ use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
 use diesel::prelude::*;
 use diesel::update;
+use filter::Filter;
 use gh::UpdateStatus;
 use log::{debug, error, info};
 use models::NotificationState;
@@ -149,12 +150,25 @@ pub async fn sync(connection: &mut DbConnection) -> Result<()> {
 
 pub async fn get_notifications(
     connection: &mut DbConnection,
-    query: &str,
+    filter: &str,
 ) -> Result<Vec<DBNotification>> {
-    Ok(notifications
+    let filters = Filter::parse(filter)?;
+
+    debug!("filters: {:?}", filters);
+    let mut query = notifications
+        .into_boxed()
         .select(DBNotification::as_select())
-        .filter(done.eq(false))
-        .filter(title.like(format!("%{}%", query))) // ilike on sqlite
+        .filter(done.eq(false));
+
+    if !filters.title.is_empty() {
+        query = query.filter(title.like(format!("%{}%", filters.title)));
+    }
+
+    if !filters.author.is_empty() {
+        query = query.filter(author.like(format!("%{}%", filters.author)));
+    }
+    // TODO score
+    Ok(query
         .order_by(((score + score_boost).desc(), updated_at.desc()))
         .load(connection)?)
 }

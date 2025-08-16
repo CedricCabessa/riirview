@@ -1,5 +1,6 @@
 pub mod config;
 pub mod dirs;
+pub mod filter;
 pub mod gh;
 pub mod models;
 pub mod schema;
