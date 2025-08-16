@@ -22,3 +22,5 @@ Cargo.lock
 
 /log/
 riirview.sql
+.aider*
+.env
