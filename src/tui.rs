@@ -136,7 +136,7 @@ impl App {
         let (tx, mut rx) = mpsc::channel::<Message>(32);
         let pool = get_connection_pool();
 
-        let notifications = refresh(&mut pool.clone().get()?, &String::new()).await?;
+        let notifications = refresh(&mut pool.clone().get()?, "").await?;
         self.update_ui(
             MessageUi::UiUpdate(UiState::default()),
             &mut terminal,
@@ -676,7 +676,7 @@ async fn sync(connection: &mut DbConnection) -> Result<(), String> {
     })
 }
 
-async fn refresh(connection: &mut DbConnection, query: &String) -> Result<Vec<Notification>> {
+async fn refresh(connection: &mut DbConnection, query: &str) -> Result<Vec<Notification>> {
     service::get_notifications(connection, query).await
 }
 

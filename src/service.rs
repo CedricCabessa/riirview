@@ -149,7 +149,7 @@ pub async fn sync(connection: &mut DbConnection) -> Result<()> {
 
 pub async fn get_notifications(
     connection: &mut DbConnection,
-    query: &String,
+    query: &str,
 ) -> Result<Vec<DBNotification>> {
     Ok(notifications
         .select(DBNotification::as_select())
