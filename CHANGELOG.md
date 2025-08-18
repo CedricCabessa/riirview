@@ -1,3 +1,10 @@
+# unversionned
+## future
+
+ - feat: add ⌛ icon
+ - fix: move cursor when changing score
+ - feat: add search, syntax is `foo author:john`
+
 # 1.3.0
 ## 2025-05-13
 
