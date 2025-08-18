@@ -15,7 +15,7 @@ impl Filter {
         let mut repo = String::new();
         let mut state = String::new();
 
-        let known_keys = ["title:", "author:"];
+        let known_keys = ["title:", "author:", "repo:", "state:"];
         let mut key_positions: Vec<(&str, usize)> = known_keys
             .iter()
             .filter_map(|key| input.find(key).map(|pos| (*key, pos)))
@@ -48,6 +48,16 @@ impl Filter {
                 match key {
                     "title:" => title = value.to_string(),
                     "author:" => author = value.to_string(),
+                    "repo:" => repo = value.to_string(),
+                    "state:" => {
+                        state = match value.to_lowercase().as_str() {
+                            "open" => "Open".to_string(),
+                            "draft" => "Draft".to_string(),
+                            "resolved" => "Resolved".to_string(),
+                            "canceled" => "Canceled".to_string(),
+                            _ => String::new(), // Invalid state, keep empty
+                        }
+                    }
                     _ => (),
                 }
             }
