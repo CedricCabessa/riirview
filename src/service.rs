@@ -161,13 +161,23 @@ pub async fn get_notifications(
         .filter(done.eq(false));
 
     if !filters.title.is_empty() {
-        query = query.filter(title.like(format!("%{}%", filters.title)));
+        query = filters.title.split(" ").fold(query, |query, title_term| {
+            query.filter(title.like(format!("%{}%", title_term)))
+        });
     }
 
     if !filters.author.is_empty() {
         query = query.filter(author.like(format!("%{}%", filters.author)));
     }
-    // TODO score
+
+    if !filters.repo.is_empty() {
+        query = query.filter(repo.like(format!("%{}%", filters.repo)));
+    }
+
+    if !filters.state.is_empty() {
+        query = query.filter(state.like(format!("%{}%", filters.state)));
+    }
+
     Ok(query
         .order_by(((score + score_boost).desc(), updated_at.desc()))
         .load(connection)?)
