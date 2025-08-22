@@ -139,6 +139,7 @@ impl App {
         let notifications = refresh(&mut pool.clone().get()?, "").await?;
         self.update_ui(
             MessageUi::UiUpdate(UiState::default()),
+            tx.clone(),
             &mut terminal,
             &mut list_state,
             &notifications,
@@ -162,6 +163,7 @@ impl App {
                     self.popup = None;
                     self.update_ui(
                         MessageUi::Redraw,
+                        tx.clone(),
                         &mut terminal,
                         &mut list_state,
                         &notifications,
@@ -186,8 +188,14 @@ impl App {
                         ));
                     }
                     Message::Ui(ui) => {
-                        self.update_ui(ui, &mut terminal, &mut list_state, &notifications)
-                            .await?;
+                        self.update_ui(
+                            ui,
+                            tx.clone(),
+                            &mut terminal,
+                            &mut list_state,
+                            &notifications,
+                        )
+                        .await?;
                     }
                     Message::Noop => {}
                 }
@@ -262,6 +270,7 @@ impl App {
     async fn update_ui(
         &mut self,
         message: MessageUi,
+        tx: mpsc::Sender<Message>,
         terminal: &mut DefaultTerminal,
         list_state: &mut ListState,
         notifications: &Vec<Notification>,
@@ -294,9 +303,16 @@ impl App {
             MessageUi::SearchInput(c) => {
                 self.input.push(c);
                 self.state.reset();
+                tx.send(Message::Ui(MessageUi::Redraw))
+                    .await
+                    .expect("cannot send");
             }
             MessageUi::SearchBackspace => {
                 self.input.pop();
+                self.state.reset();
+                tx.send(Message::Ui(MessageUi::Redraw))
+                    .await
+                    .expect("cannot send");
             }
             MessageUi::SearchQuit => {
                 self.input.clear();
