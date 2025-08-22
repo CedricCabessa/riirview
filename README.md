@@ -103,6 +103,7 @@ We don't do any validity check on param.
 | enter             | open github page                           |
 | r                 | mark notification as done                  |
 | R                 | mark all notifications below cusor as done |
+| /                 | search                                     |
 | x                 | explain scoring                            |
 | ?                 | show help popup                            |
 | q                 | quit                                       |
@@ -110,6 +111,24 @@ We don't do any validity check on param.
 Note on "explain scoring": display rules matching this notification. Rules are recomputed on demand,
 if you have changed your rule file, the result might not match the score in db.
 
+## Search
+
+Using `/` you can search your notification.
+
+Here is an example:
+
+```
+author:JohnDoe rust fix state:open
+```
+
+Search all notification authored by JohnDoe with the word "rust" and "fix" in title, in the state
+"open".
+
+List of state:
+  * open
+  * draft
+  * resolved (or close)
+  * canceled
 
 ## Files
 
