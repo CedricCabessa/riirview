@@ -236,8 +236,9 @@ impl App {
             ])
             .spacing(1);
             let [_, input_area, main_area] = layout_v.areas(frame.area());
+            // TODO: use ratatui_textarea instead
             frame.render_widget(
-                Line::from(format!("🐕> {}", self.input.clone())).alignment(Alignment::Left),
+                Line::from(format!("🐕> {}█", self.input.clone())).alignment(Alignment::Left),
                 input_area,
             );
             main_area
