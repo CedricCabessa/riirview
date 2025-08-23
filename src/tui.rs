@@ -598,19 +598,19 @@ async fn open_gh(
     idx: Option<usize>,
     notifications: &[Notification],
 ) -> Result<(), String> {
-    if let Some(idx) = idx {
-        if let Some(notification) = notifications.get(idx) {
-            return match open::that(notification.url.clone()) {
-                Ok(_) => {
-                    mark_as_read(connection, notification).await?;
-                    Ok(())
-                }
-                Err(e) => {
-                    error!("{e}");
-                    Err(format!("Failed to open browser: {}", e))
-                }
-            };
-        }
+    if let Some(idx) = idx
+        && let Some(notification) = notifications.get(idx)
+    {
+        return match open::that(notification.url.clone()) {
+            Ok(_) => {
+                mark_as_read(connection, notification).await?;
+                Ok(())
+            }
+            Err(e) => {
+                error!("{e}");
+                Err(format!("Failed to open browser: {}", e))
+            }
+        };
     }
     Ok(())
 }
@@ -620,16 +620,16 @@ async fn mark_as_done(
     idx: Option<usize>,
     notifications: &[Notification],
 ) -> Result<(), String> {
-    if let Some(idx) = idx {
-        if let Some(notification) = notifications.get(idx) {
-            return match service::mark_notification_as_done(connection, notification).await {
-                Ok(_) => Ok(()),
-                Err(e) => {
-                    error!("{e}");
-                    Err(format!("Failed to mark as done {}", e))
-                }
-            };
-        }
+    if let Some(idx) = idx
+        && let Some(notification) = notifications.get(idx)
+    {
+        return match service::mark_notification_as_done(connection, notification).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("{e}");
+                Err(format!("Failed to mark as done {}", e))
+            }
+        };
     }
     Ok(())
 }
@@ -713,49 +713,49 @@ async fn update_score(
     notifications: &[Notification],
     modifier: i32,
 ) -> Result<Option<Notification>, String> {
-    if let Some(idx) = idx {
-        if let Some(notification) = notifications.get(idx) {
-            return match service::update_score(connection, notification, modifier).await {
-                Ok(_) => Ok(Some(notification.clone())),
-                Err(err) => {
-                    error!("error in score update {:?}", err);
-                    Err("cannot update score".into())
-                }
-            };
-        }
+    if let Some(idx) = idx
+        && let Some(notification) = notifications.get(idx)
+    {
+        return match service::update_score(connection, notification, modifier).await {
+            Ok(_) => Ok(Some(notification.clone())),
+            Err(err) => {
+                error!("error in score update {:?}", err);
+                Err("cannot update score".into())
+            }
+        };
     }
     Ok(None)
 }
 
 async fn explain(idx: Option<usize>, notifications: &[Notification]) -> Result<String, String> {
-    if let Some(idx) = idx {
-        if let Some(notification) = notifications.get(idx) {
-            let res = service::explain(notification)
-                .await
-                .or(Err(String::from("explain failed")))?;
+    if let Some(idx) = idx
+        && let Some(notification) = notifications.get(idx)
+    {
+        let res = service::explain(notification)
+            .await
+            .or(Err(String::from("explain failed")))?;
 
-            let explanation = res.iter().fold(String::new(), |acc, rule| {
-                let prefix = if acc.is_empty() {
-                    String::from("\n")
-                } else {
-                    acc
-                };
-                format!("{prefix}rule:{} score:{}\n", rule.name, rule.score)
-            });
-            let explanation = if notification.score_boost != 0 {
-                format!("{explanation}\nmanual boost:{}", notification.score_boost)
+        let explanation = res.iter().fold(String::new(), |acc, rule| {
+            let prefix = if acc.is_empty() {
+                String::from("\n")
             } else {
-                explanation
+                acc
             };
-            let explanation = if explanation.is_empty() {
-                "\nThis notification doesn't match any rule".to_string()
-            } else {
-                explanation
-            };
-
-            return Ok(explanation);
+            format!("{prefix}rule:{} score:{}\n", rule.name, rule.score)
+        });
+        let explanation = if notification.score_boost != 0 {
+            format!("{explanation}\nmanual boost:{}", notification.score_boost)
+        } else {
+            explanation
         };
-    }
+        let explanation = if explanation.is_empty() {
+            "\nThis notification doesn't match any rule".to_string()
+        } else {
+            explanation
+        };
+
+        return Ok(explanation);
+    };
     Ok(String::new())
 }
 

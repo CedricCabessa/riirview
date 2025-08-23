@@ -59,11 +59,11 @@ pub struct Scorer {
 impl Scorer {
     pub fn new(toml_path: PathBuf) -> Result<Scorer, Error> {
         let config_res = fs::read_to_string(toml_path);
-        if let Err(ref error) = config_res {
-            if let Error::RuleFileNotFound = error.into() {
-                error!("No rules file found!");
-                return Ok(Scorer { rules: vec![] });
-            }
+        if let Err(ref error) = config_res
+            && let Error::RuleFileNotFound = error.into()
+        {
+            error!("No rules file found!");
+            return Ok(Scorer { rules: vec![] });
         }
         let config = config_res?;
 
