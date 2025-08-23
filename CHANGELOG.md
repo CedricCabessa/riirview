@@ -1,5 +1,5 @@
-# unversionned
-## future
+# 1.4.0
+## 2025-08-23
 
  - feat: add ⌛ icon
  - fix: move cursor when changing score
