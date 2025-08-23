@@ -17,6 +17,7 @@ use ratatui::{
     widgets::{Block, Clear, List},
 };
 use tokio::sync::mpsc;
+use tui_textarea::TextArea;
 
 use ratatui::Frame;
 
@@ -48,8 +49,7 @@ enum MessageUi {
     UiUpdate(UiState),
     Popup(Popup),
     SearchActivate,
-    SearchInput(char),
-    SearchBackspace,
+    SearchInput(Event),
     SearchQuit,
     Redraw,
 }
@@ -120,14 +120,14 @@ enum InputMode {
 }
 
 #[derive(Default)]
-struct App {
+struct App<'a> {
     state: UiState,
     popup: Option<Popup>,
-    input: String,
+    search_text: TextArea<'a>,
     input_mode: InputMode,
 }
 
-impl App {
+impl App<'_> {
     async fn run(&mut self) -> Result<()> {
         let mut terminal = ratatui::init();
         let mut list_state = ListState::default();
@@ -137,6 +137,7 @@ impl App {
         let pool = get_connection_pool();
 
         let notifications = refresh(&mut pool.clone().get()?, "").await?;
+        self.reset_search();
         self.update_ui(
             MessageUi::UiUpdate(UiState::default()),
             tx.clone(),
@@ -157,7 +158,8 @@ impl App {
                 // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
                 // it should be done only after a change in the list
 
-                let notifications = refresh(&mut pool.clone().get()?, &self.input).await?;
+                let notifications =
+                    refresh(&mut pool.clone().get()?, &self.search_string()).await?;
 
                 if self.popup.is_some() {
                     self.popup = None;
@@ -184,7 +186,7 @@ impl App {
                             message_action,
                             list_state.selected(),
                             notifications,
-                            self.input.clone(),
+                            self.search_string(),
                         ));
                     }
                     Message::Ui(ui) => {
@@ -213,6 +215,7 @@ impl App {
         frame: &mut Frame,
         notifications: &Vec<Notification>,
         list_state: &mut ListState,
+        search_text: &TextArea,
         status: Result<String, String>,
     ) {
         let status = match status {
@@ -236,11 +239,10 @@ impl App {
             ])
             .spacing(1);
             let [_, input_area, main_area] = layout_v.areas(frame.area());
-            // TODO: use ratatui_textarea instead
-            frame.render_widget(
-                Line::from(format!("🐕> {}█", self.input.clone())).alignment(Alignment::Left),
-                input_area,
-            );
+            let layout_input = Layout::horizontal([Constraint::Length(4), Constraint::Fill(1)]);
+            let [icon_area, search_area] = layout_input.areas(input_area);
+            frame.render_widget(Line::from("🐕>"), icon_area);
+            frame.render_widget(search_text, search_area);
             main_area
         } else {
             let layout_v =
@@ -302,21 +304,14 @@ impl App {
                 self.input_mode = InputMode::Search;
             }
             MessageUi::SearchInput(c) => {
-                self.input.push(c);
-                self.state.reset();
-                tx.send(Message::Ui(MessageUi::Redraw))
-                    .await
-                    .expect("cannot send");
-            }
-            MessageUi::SearchBackspace => {
-                self.input.pop();
+                self.search_text.input(c);
                 self.state.reset();
                 tx.send(Message::Ui(MessageUi::Redraw))
                     .await
                     .expect("cannot send");
             }
             MessageUi::SearchQuit => {
-                self.input.clear();
+                self.reset_search();
                 self.state.reset();
                 self.input_mode = InputMode::Normal;
             }
@@ -337,8 +332,26 @@ impl App {
             }
         };
 
-        terminal.draw(|frame| self.draw(frame, notifications, list_state, headline))?;
+        terminal.draw(|frame| {
+            self.draw(
+                frame,
+                notifications,
+                list_state,
+                &self.search_text,
+                headline,
+            )
+        })?;
         Ok(())
+    }
+
+    fn search_string(&self) -> String {
+        self.search_text.lines()[0].clone()
+    }
+
+    fn reset_search(&mut self) {
+        self.search_text = TextArea::default();
+        let style = Style::default().remove_modifier(Modifier::UNDERLINED);
+        self.search_text.set_cursor_line_style(style);
     }
 }
 
@@ -519,10 +532,7 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
                         KeyCode::Enter => {
                             input_mode = InputMode::Normal;
                             Message::Noop
-                            //Message::Ui(MessageUi::SearchValidate)
                         }
-                        KeyCode::Backspace => Message::Ui(MessageUi::SearchBackspace),
-                        KeyCode::Char(c) => Message::Ui(MessageUi::SearchInput(c)),
                         KeyCode::Esc => {
                             input_mode = InputMode::Normal;
                             //needs 2 messages
@@ -530,7 +540,7 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
                                 .expect("cannot send message");
                             Message::Ui(MessageUi::Redraw)
                         }
-                        _ => Message::Noop,
+                        _ => Message::Ui(MessageUi::SearchInput(event.unwrap())),
                     }
                 }
             };
