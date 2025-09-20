@@ -50,6 +50,7 @@ enum MessageUi {
     Popup(Popup),
     SearchActivate,
     SearchInput(Event),
+    SearchValidated,
     SearchQuit,
     Redraw,
 }
@@ -302,6 +303,8 @@ impl App<'_> {
             MessageUi::SearchActivate => {
                 self.state.reset();
                 self.input_mode = InputMode::Search;
+                self.search_text
+                    .set_cursor_style(Style::default().add_modifier(Modifier::REVERSED));
             }
             MessageUi::SearchInput(c) => {
                 self.search_text.input(c);
@@ -314,6 +317,10 @@ impl App<'_> {
                 self.reset_search();
                 self.state.reset();
                 self.input_mode = InputMode::Normal;
+            }
+            MessageUi::SearchValidated => {
+                self.search_text
+                    .set_cursor_style(Style::default().add_modifier(Modifier::HIDDEN));
             }
         };
 
@@ -531,7 +538,7 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
                     match key.code {
                         KeyCode::Enter => {
                             input_mode = InputMode::Normal;
-                            Message::Noop
+                            Message::Ui(MessageUi::SearchValidated)
                         }
                         KeyCode::Esc => {
                             input_mode = InputMode::Normal;
