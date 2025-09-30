@@ -1,5 +1,5 @@
-# unreleased
-## future
+# 1.4.1
+## 2025-09-30
 
  - hide cursor after search is validated
 
