@@ -1,3 +1,8 @@
+# 1.4.2
+## future
+
+ - add `type:` in search
+
 # 1.4.1
 ## 2025-09-30
 

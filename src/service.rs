@@ -178,6 +178,10 @@ pub async fn get_notifications(
         query = query.filter(state.like(format!("%{}%", filters.state)));
     }
 
+    if !filters.type_.is_empty() {
+        query = query.filter(type_.like(format!("%{}%", filters.type_)));
+    }
+
     Ok(query
         .order_by(((score + score_boost).desc(), updated_at.desc()))
         .load(connection)?)

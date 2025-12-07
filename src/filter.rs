@@ -6,6 +6,7 @@ pub struct Filter {
     pub author: String,
     pub repo: String,
     pub state: String,
+    pub type_: String,
 }
 
 impl Filter {
@@ -18,6 +19,7 @@ impl Filter {
                     author: String::new(),
                     repo: String::new(),
                     state: String::new(),
+                    type_: String::new(),
                 },
                 // Accumulator for title parts
                 Vec::new(),
@@ -36,6 +38,14 @@ impl Filter {
                         "resolved" | "closed" => "Resolved".to_string(),
                         "canceled" => "Canceled".to_string(),
                         _ => String::new(), // Invalid state values are ignored
+                    };
+                } else if word.starts_with("type:") {
+                    let type_str = word.trim_start_matches("type:").to_ascii_lowercase();
+                    filter.type_ = match type_str.as_str() {
+                        "pr" | "pullrequest" => "PullRequest".to_string(),
+                        "issue" | "bug" => "Issue".to_string(),
+                        "release" => "Release".to_string(),
+                        _ => String::new(), // Invalid type values are ignored
                     };
                 } else if word.starts_with("title:") {
                     // Explicit title keyword, the value is added to title parts
@@ -56,6 +66,7 @@ impl Filter {
             author: filter_accumulator.author,
             repo: filter_accumulator.repo,
             state: filter_accumulator.state,
+            type_: filter_accumulator.type_,
         })
     }
 }
@@ -71,6 +82,7 @@ mod test {
         assert_eq!(filters.author, "JohnDoe");
         assert!(filters.repo.is_empty());
         assert!(filters.state.is_empty());
+        assert!(filters.type_.is_empty());
 
         // only title can have space
         let filters = Filter::parse("title:Rust Programming author:John Doe").unwrap();
@@ -78,18 +90,21 @@ mod test {
         assert_eq!(filters.author, "John");
         assert!(filters.repo.is_empty());
         assert!(filters.state.is_empty());
+        assert!(filters.type_.is_empty());
 
         let filters = Filter::parse("author:JohnDoe").unwrap();
         assert!(filters.title.is_empty());
         assert_eq!(filters.author, "JohnDoe");
         assert!(filters.repo.is_empty());
         assert!(filters.state.is_empty());
+        assert!(filters.type_.is_empty());
 
         let filters = Filter::parse("Rust Programming").unwrap();
         assert_eq!(filters.title, "Rust Programming");
         assert!(filters.author.is_empty());
         assert!(filters.repo.is_empty());
         assert!(filters.state.is_empty());
+        assert!(filters.type_.is_empty());
 
         let filters =
             Filter::parse("Rust Programming author:JohnDoe repo:LedgerHQ/ledger-live").unwrap();
@@ -97,35 +112,132 @@ mod test {
         assert_eq!(filters.author, "JohnDoe");
         assert_eq!(filters.repo, "LedgerHQ/ledger-live");
         assert!(filters.state.is_empty());
+        assert!(filters.type_.is_empty());
 
         let filters = Filter::parse("title:Rust Programming state:open").unwrap();
         assert_eq!(filters.title, "Rust Programming");
         assert!(filters.author.is_empty());
         assert!(filters.repo.is_empty());
         assert_eq!(filters.state, "Open");
+        assert!(filters.type_.is_empty());
 
         let filters = Filter::parse("title:Rust Programming state:Open").unwrap();
         assert_eq!(filters.title, "Rust Programming");
         assert!(filters.author.is_empty());
         assert!(filters.repo.is_empty());
         assert_eq!(filters.state, "Open");
+        assert!(filters.type_.is_empty());
 
         let filters = Filter::parse("title:Rust Programming state:Resolved").unwrap();
         assert_eq!(filters.title, "Rust Programming");
         assert!(filters.author.is_empty());
         assert!(filters.repo.is_empty());
         assert_eq!(filters.state, "Resolved");
+        assert!(filters.type_.is_empty());
 
         let filters = Filter::parse("title:Rust Programming state:closed").unwrap();
         assert_eq!(filters.title, "Rust Programming");
         assert!(filters.author.is_empty());
         assert!(filters.repo.is_empty());
         assert_eq!(filters.state, "Resolved");
+        assert!(filters.type_.is_empty());
 
         let filters = Filter::parse("title:Rust Programming state:Pasfini").unwrap();
         assert_eq!(filters.title, "Rust Programming");
         assert!(filters.author.is_empty());
         assert!(filters.repo.is_empty());
         assert!(filters.state.is_empty());
+        assert!(filters.type_.is_empty());
+
+        let filters = Filter::parse("type:pr").unwrap();
+        assert_eq!(filters.type_, "PullRequest");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:pullrequest").unwrap();
+        assert_eq!(filters.type_, "PullRequest");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:PR").unwrap();
+        assert_eq!(filters.type_, "PullRequest");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:PullRequest").unwrap();
+        assert_eq!(filters.type_, "PullRequest");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:issue").unwrap();
+        assert_eq!(filters.type_, "Issue");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:bug").unwrap();
+        assert_eq!(filters.type_, "Issue");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:BUG").unwrap();
+        assert_eq!(filters.type_, "Issue");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:Issue").unwrap();
+        assert_eq!(filters.type_, "Issue");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:release").unwrap();
+        assert_eq!(filters.type_, "Release");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:RELEASE").unwrap();
+        assert_eq!(filters.type_, "Release");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:invalid").unwrap();
+        assert!(filters.type_.is_empty());
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("title:Rust type:pr author:JohnDoe").unwrap();
+        assert_eq!(filters.title, "Rust");
+        assert_eq!(filters.type_, "PullRequest");
+        assert_eq!(filters.author, "JohnDoe");
+        assert!(filters.repo.is_empty());
+        assert!(filters.state.is_empty());
+
+        let filters = Filter::parse("type:issue state:open repo:myrepo").unwrap();
+        assert_eq!(filters.type_, "Issue");
+        assert_eq!(filters.state, "Open");
+        assert_eq!(filters.repo, "myrepo");
+        assert!(filters.title.is_empty());
+        assert!(filters.author.is_empty());
     }
 }
