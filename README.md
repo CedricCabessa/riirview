@@ -145,6 +145,7 @@ For other OS, see [here](https://github.com/dirs-dev/directories-rs?tab=readme-o
 ## Environment variables
 
  * `RUST_LOG`: manage log level: `debug`, `info` (default), `error`
+ * `GH_TOKEN`: your github token (mandatory)
 
 ## FAQ
 
