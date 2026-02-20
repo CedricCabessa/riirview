@@ -149,13 +149,13 @@ impl Client {
         Ok(resp)
     }
 
-    pub async fn mark_notification_done(&self, id: &String) -> Result<()> {
+    pub async fn mark_notification_done(&self, id: &str) -> Result<()> {
         let url = format!("{}/notifications/threads/{}", self.base_url, id);
         self.del(url).await?;
         Ok(())
     }
 
-    pub async fn mark_notification_read(&self, id: &String) -> Result<()> {
+    pub async fn mark_notification_read(&self, id: &str) -> Result<()> {
         let url = format!("{}/notifications/threads/{}", self.base_url, id);
         self.patch(url).await?;
         Ok(())
@@ -405,7 +405,7 @@ where
         .await)
 }
 
-pub async fn mark_as_done(id: &String) -> Result<()> {
+pub async fn mark_as_done(id: &str) -> Result<()> {
     let client = Client::new()?;
     client.mark_notification_done(id).await
 }
@@ -437,7 +437,7 @@ pub async fn mark_as_done_multiple(ids: Vec<String>) -> Result<()> {
     }
 }
 
-pub async fn mark_as_read(id: &String) -> Result<()> {
+pub async fn mark_as_read(id: &str) -> Result<()> {
     let client = Client::new()?;
     client.mark_notification_read(id).await
 }

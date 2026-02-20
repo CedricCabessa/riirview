@@ -224,7 +224,7 @@ impl App<'_> {
     fn draw(
         &self,
         frame: &mut Frame,
-        notifications: &Vec<Notification>,
+        notifications: &[Notification],
         list_state: &mut ListState,
         search_text: &TextArea,
         status: Result<String, String>,
