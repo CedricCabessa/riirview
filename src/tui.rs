@@ -807,17 +807,20 @@ impl From<&Notification> for Text<'_> {
 }
 
 fn ellipsis(txt: &str, max_len: usize) -> String {
-    if txt.len() > max_len {
-        let substr = &txt[0..max_len - 1];
-        let mut res = substr.to_owned();
-
+    let char_count = txt.chars().count();
+    if char_count > max_len {
+        let end = txt
+            .char_indices()
+            .nth(max_len - 1)
+            .map(|(i, _)| i)
+            .unwrap_or(txt.len());
+        let mut res = txt[..end].to_owned();
         res.push('…');
         res
     } else {
         let mut res = txt.to_owned();
-        let whitespace = vec![' '; max_len - txt.len()];
-        let whitespace: String = whitespace.iter().collect();
-        res.push_str(&whitespace);
+        let padding = " ".repeat(max_len - char_count);
+        res.push_str(&padding);
         res
     }
 }
