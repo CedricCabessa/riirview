@@ -126,6 +126,8 @@ struct App<'a> {
     popup: Option<Popup>,
     search_text: TextArea<'a>,
     input_mode: InputMode,
+    notifications: Vec<Notification>,
+    dirty: bool,
 }
 
 impl App<'_> {
@@ -137,14 +139,14 @@ impl App<'_> {
         let (tx, mut rx) = mpsc::channel::<Message>(32);
         let pool = get_connection_pool();
 
-        let notifications = refresh(&mut pool.clone().get()?, "").await?;
+        self.notifications = refresh(&mut pool.clone().get()?, "").await?;
+        self.dirty = false;
         self.reset_search();
         self.update_ui(
             MessageUi::UiUpdate(UiState::default()),
             tx.clone(),
             &mut terminal,
             &mut list_state,
-            &notifications,
         )
         .await?;
 
@@ -156,11 +158,26 @@ impl App<'_> {
         loop {
             let maybe_message = rx.recv().await;
             if let Some(message) = maybe_message {
-                // FIXME: fetch notif (in db) for *every* ui event (move up/down, etc.)
-                // it should be done only after a change in the list
+                // Determine if this message requires a DB refresh
+                let needs_refresh = !matches!(
+                    message,
+                    Message::Ui(
+                        MessageUi::MoveUp(_)
+                            | MessageUi::MoveDown(_)
+                            | MessageUi::MoveTo(_)
+                            | MessageUi::Popup(_)
+                    ) | Message::Noop
+                );
 
-                let notifications =
-                    refresh(&mut pool.clone().get()?, &self.search_string()).await?;
+                if needs_refresh {
+                    self.dirty = true;
+                }
+
+                if self.dirty {
+                    self.notifications =
+                        refresh(&mut pool.clone().get()?, &self.search_string()).await?;
+                    self.dirty = false;
+                }
 
                 if self.popup.is_some() {
                     self.popup = None;
@@ -169,7 +186,6 @@ impl App<'_> {
                         tx.clone(),
                         &mut terminal,
                         &mut list_state,
-                        &notifications,
                     )
                     .await?;
                     continue;
@@ -186,19 +202,13 @@ impl App<'_> {
                             pool.clone().get()?,
                             message_action,
                             list_state.selected(),
-                            notifications,
+                            self.notifications.clone(),
                             self.search_string(),
                         ));
                     }
                     Message::Ui(ui) => {
-                        self.update_ui(
-                            ui,
-                            tx.clone(),
-                            &mut terminal,
-                            &mut list_state,
-                            &notifications,
-                        )
-                        .await?;
+                        self.update_ui(ui, tx.clone(), &mut terminal, &mut list_state)
+                            .await?;
                     }
                     Message::Noop => {}
                 }
@@ -277,7 +287,6 @@ impl App<'_> {
         tx: mpsc::Sender<Message>,
         terminal: &mut DefaultTerminal,
         list_state: &mut ListState,
-        notifications: &Vec<Notification>,
     ) -> Result<()> {
         match message {
             MessageUi::MoveUp(mov) => {
@@ -328,7 +337,7 @@ impl App<'_> {
             Err(self.state.error.clone())
         } else {
             let info = if self.state.info.is_empty() {
-                format!("Riirview, {} notifs", notifications.len())
+                format!("Riirview, {} notifs", self.notifications.len())
             } else {
                 self.state.info.clone()
             };
@@ -342,7 +351,7 @@ impl App<'_> {
         terminal.draw(|frame| {
             self.draw(
                 frame,
-                notifications,
+                &self.notifications,
                 list_state,
                 &self.search_text,
                 headline,
