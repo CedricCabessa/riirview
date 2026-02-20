@@ -523,6 +523,49 @@ mod tests {
         assert!(result.is_err(), "mark_as_done should propagate HTTP errors");
     }
 
+    #[tokio::test]
+    async fn test_mark_as_done_multiple_best_effort() {
+        use tempfile::NamedTempFile;
+
+        unsafe { std::env::set_var("GH_TOKEN", "faketoken") };
+
+        let mut server = mockito::Server::new_async().await;
+        let db_file = NamedTempFile::new().unwrap();
+        let rule_file = NamedTempFile::new().unwrap();
+        Config::init_for_test(
+            server.url(),
+            db_file.path().to_str().unwrap().to_string(),
+            rule_file.path().to_str().unwrap().to_string(),
+        );
+
+        // First ID returns 500 (failure)
+        let mock_fail = server
+            .mock("DELETE", "/notifications/threads/fail_id")
+            .with_status(500)
+            .expect(1)
+            .create();
+
+        // Second ID returns 204 (success)
+        let mock_ok = server
+            .mock("DELETE", "/notifications/threads/ok_id")
+            .with_status(204)
+            .expect(1)
+            .create();
+
+        let ids = vec!["fail_id".to_string(), "ok_id".to_string()];
+        let result = mark_as_done_multiple(&ids).await;
+
+        // Should report the error
+        assert!(
+            result.is_err(),
+            "mark_as_done_multiple should report failures"
+        );
+
+        // Both endpoints should have been called (best-effort, no short-circuit)
+        mock_fail.assert();
+        mock_ok.assert();
+    }
+
     #[test]
     fn test_parser() -> Result<()> {
         use chrono::naive::{NaiveDate, NaiveTime};
