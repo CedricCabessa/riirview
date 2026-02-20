@@ -833,6 +833,20 @@ mod tests {
     }
 
     #[test]
+    fn test_ellipsis_multibyte_utf8() {
+        // Multi-byte chars: 'é' is 2 bytes, '日' is 3 bytes
+        // This should not panic on multi-byte character boundaries
+        assert_eq!(ellipsis("héllo", 4), "hél…");
+        assert_eq!(ellipsis("日本語テスト", 4), "日本語…");
+    }
+
+    #[test]
+    fn test_ellipsis_multibyte_padding() {
+        // Padding calculation should use char count, not byte length
+        assert_eq!(ellipsis("hé", 5), "hé   ");
+    }
+
+    #[test]
     fn test_keymap() {
         // This test can be flaky...
         assert!(KEYMAP.contains("up/down           | move cursor up or down"));
