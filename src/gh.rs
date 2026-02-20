@@ -257,10 +257,11 @@ fn url_to_page(url: &str) -> Result<u32> {
     Ok(page)
 }
 
-fn pages_from_link(link: &str) -> Result<Vec<String>> {
-    let regex = Regex::new(r#"<(.*)>; rel="next", <(.*)>; rel="last""#);
+static LINK_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"<(.*)>; rel="next", <(.*)>; rel="last""#).expect("valid regex"));
 
-    let matches = regex?.captures(link);
+fn pages_from_link(link: &str) -> Result<Vec<String>> {
+    let matches = LINK_REGEX.captures(link);
     if let Some(matches) = matches {
         let next = matches.get(1).ok_or(anyhow!("link parse error"))?.as_str();
         let last = matches.get(2).ok_or(anyhow!("link parse error"))?.as_str();
