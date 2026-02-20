@@ -33,14 +33,14 @@ pub struct Rule {
 
 impl Rule {
     pub fn matcher(&self, notification: &Notification) -> i32 {
-        let fct = match self.rule {
+        let match_fn = match self.rule {
             RuleType::Author => rule_author,
             RuleType::Repo => rule_repo,
             RuleType::Title => rule_title,
             RuleType::Org => rule_org,
             RuleType::Reason => rule_reason,
         };
-        if fct(notification, &self.params) {
+        if match_fn(notification, &self.params) {
             info!(
                 "{} match {} score:{}",
                 notification.title, self.name, self.score
