@@ -408,11 +408,26 @@ pub async fn mark_as_done(id: &String) -> Result<()> {
 }
 
 pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<()> {
-    iter(ids)
+    let results: Vec<Result<()>> = iter(ids)
         .map(mark_as_done)
         .buffer_unordered(NB_TASK)
-        .try_collect()
-        .await
+        .collect()
+        .await;
+
+    let errors: Vec<_> = results.into_iter().filter_map(|r| r.err()).collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "failed to delete {} notification(s): {}",
+            errors.len(),
+            errors
+                .iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+    }
 }
 
 pub async fn mark_as_read(id: &String) -> Result<()> {
