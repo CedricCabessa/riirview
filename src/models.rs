@@ -31,12 +31,12 @@ where
     String: deserialize::FromSql<VarChar, B>,
 {
     fn from_sql(bytes: B::RawValue<'_>) -> deserialize::Result<Self> {
-        <String as deserialize::FromSql<VarChar, B>>::from_sql(bytes).map(|sql| {
+        <String as deserialize::FromSql<VarChar, B>>::from_sql(bytes).and_then(|sql| {
             match sql.as_str() {
-                "PullRequest" => NotificationType::PullRequest,
-                "Issue" => NotificationType::Issue,
-                "Release" => NotificationType::Release,
-                _ => panic!("invalid type {sql}"),
+                "PullRequest" => Ok(NotificationType::PullRequest),
+                "Issue" => Ok(NotificationType::Issue),
+                "Release" => Ok(NotificationType::Release),
+                _ => Err(format!("invalid type: {sql}").into()),
             }
         })
     }
@@ -71,13 +71,13 @@ where
     String: deserialize::FromSql<VarChar, B>,
 {
     fn from_sql(bytes: B::RawValue<'_>) -> deserialize::Result<Self> {
-        <String as deserialize::FromSql<VarChar, B>>::from_sql(bytes).map(|sql| {
+        <String as deserialize::FromSql<VarChar, B>>::from_sql(bytes).and_then(|sql| {
             match sql.as_str() {
-                "Draft" => NotificationState::Draft,
-                "Resolved" => NotificationState::Resolved,
-                "Canceled" => NotificationState::Canceled,
-                "Open" => NotificationState::Open,
-                _ => panic!("invalid state {sql}"),
+                "Draft" => Ok(NotificationState::Draft),
+                "Resolved" => Ok(NotificationState::Resolved),
+                "Canceled" => Ok(NotificationState::Canceled),
+                "Open" => Ok(NotificationState::Open),
+                _ => Err(format!("invalid state: {sql}").into()),
             }
         })
     }
