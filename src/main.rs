@@ -52,7 +52,7 @@ async fn tokio_main() -> Result<()> {
     );
     info!(
         "data {}",
-        directories.cache.to_str().unwrap_or("no data dir")
+        directories.data.to_str().unwrap_or("no data dir")
     );
     debug!("debug enabled");
 
