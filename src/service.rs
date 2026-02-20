@@ -37,65 +37,66 @@ pub async fn sync(connection: &mut DbConnection) -> Result<()> {
     info!("inserting {} notifications", gh_notifications.len());
     for gh_notification in gh_notifications {
         let notif_url = &gh_notification.subject.url.unwrap_or(String::default());
-        let (_url, _type, _author, _state) = match gh_notification.subject.r#type {
-            gh::NotificationType::PullRequest => {
-                let pr = gh_prs
-                    .iter()
-                    .find(|pr| pr.url == *notif_url)
-                    .ok_or(anyhow!("no pr found"))?;
+        let (notif_html_url, notif_type, notif_author, notif_state) =
+            match gh_notification.subject.r#type {
+                gh::NotificationType::PullRequest => {
+                    let pr = gh_prs
+                        .iter()
+                        .find(|pr| pr.url == *notif_url)
+                        .ok_or(anyhow!("no pr found"))?;
 
-                (
-                    pr.html_url.clone(),
-                    models::NotificationType::PullRequest,
-                    pr.user.login.clone(),
-                    if pr.state.as_ref() as &str == "closed" {
-                        if pr.merged {
-                            NotificationState::Resolved
+                    (
+                        pr.html_url.clone(),
+                        models::NotificationType::PullRequest,
+                        pr.user.login.clone(),
+                        if pr.state.as_ref() as &str == "closed" {
+                            if pr.merged {
+                                NotificationState::Resolved
+                            } else {
+                                NotificationState::Canceled
+                            }
+                        } else if pr.draft {
+                            NotificationState::Draft
                         } else {
-                            NotificationState::Canceled
-                        }
-                    } else if pr.draft {
-                        NotificationState::Draft
-                    } else {
-                        NotificationState::Open
-                    },
-                )
-            }
-            gh::NotificationType::Release => {
-                let release = gh_releases
-                    .iter()
-                    .find(|release| release.url == *notif_url)
-                    .ok_or(anyhow!("no release found"))?;
-                (
-                    release.html_url.clone(),
-                    models::NotificationType::Release,
-                    release.author.login.clone(),
-                    NotificationState::Open,
-                )
-            }
-            gh::NotificationType::Issue => {
-                let issue = gh_issues
-                    .iter()
-                    .find(|issue| issue.url == *notif_url)
-                    .ok_or(anyhow!("no issue found"))?;
-                (
-                    issue.html_url.clone(),
-                    models::NotificationType::Issue,
-                    issue.user.login.clone(),
-                    if issue.state == "open" {
-                        models::NotificationState::Open
-                    } else {
-                        models::NotificationState::Resolved
-                    },
-                )
-            }
-            gh::NotificationType::Unknown => (
-                "".into(),
-                models::NotificationType::PullRequest,
-                "".into(),
-                models::NotificationState::Canceled,
-            ),
-        };
+                            NotificationState::Open
+                        },
+                    )
+                }
+                gh::NotificationType::Release => {
+                    let release = gh_releases
+                        .iter()
+                        .find(|release| release.url == *notif_url)
+                        .ok_or(anyhow!("no release found"))?;
+                    (
+                        release.html_url.clone(),
+                        models::NotificationType::Release,
+                        release.author.login.clone(),
+                        NotificationState::Open,
+                    )
+                }
+                gh::NotificationType::Issue => {
+                    let issue = gh_issues
+                        .iter()
+                        .find(|issue| issue.url == *notif_url)
+                        .ok_or(anyhow!("no issue found"))?;
+                    (
+                        issue.html_url.clone(),
+                        models::NotificationType::Issue,
+                        issue.user.login.clone(),
+                        if issue.state == "open" {
+                            models::NotificationState::Open
+                        } else {
+                            models::NotificationState::Resolved
+                        },
+                    )
+                }
+                gh::NotificationType::Unknown => (
+                    "".into(),
+                    models::NotificationType::PullRequest,
+                    "".into(),
+                    models::NotificationState::Canceled,
+                ),
+            };
         let mut db_notification = DBNotification {
             id: gh_notification.id,
             reason: gh_notification.reason,
@@ -106,10 +107,10 @@ pub async fn sync(connection: &mut DbConnection) -> Result<()> {
             done: false,
             score: -1, // mutable
             score_boost: 0,
-            url: _url,
-            type_: _type,
-            author: _author,
-            state: _state,
+            url: notif_html_url,
+            type_: notif_type,
+            author: notif_author,
+            state: notif_state,
         };
         let computed_score = scorer.score(&db_notification);
         db_notification.score = computed_score;
