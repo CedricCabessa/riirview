@@ -500,6 +500,32 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_mark_as_done_propagates_error() {
+        use tempfile::NamedTempFile;
+
+        unsafe { std::env::set_var("GH_TOKEN", "faketoken") };
+
+        let mut server = mockito::Server::new_async().await;
+        let db_file = NamedTempFile::new().unwrap();
+        let rule_file = NamedTempFile::new().unwrap();
+        Config::init_for_test(
+            server.url(),
+            db_file.path().to_str().unwrap().to_string(),
+            rule_file.path().to_str().unwrap().to_string(),
+        );
+
+        // Mock DELETE to return 500 Internal Server Error
+        server
+            .mock("DELETE", "/notifications/threads/123")
+            .with_status(500)
+            .create();
+
+        let id = "123".to_string();
+        let result = mark_as_done(&id).await;
+        assert!(result.is_err(), "mark_as_done should propagate HTTP errors");
+    }
+
     #[test]
     fn test_parser() -> Result<()> {
         use chrono::naive::{NaiveDate, NaiveTime};
