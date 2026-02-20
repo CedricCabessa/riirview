@@ -13,6 +13,7 @@ use reqwest::StatusCode;
 use reqwest::header::HeaderMap;
 use serde::Deserialize;
 use std::future::Future;
+use std::sync::LazyLock;
 use url::Url;
 
 #[derive(Deserialize, Debug)]
@@ -103,6 +104,8 @@ pub struct UpdateStatus {
     pub ratelimit_used: u64,
 }
 
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+
 struct Client {
     base_url: String,
     headers: HeaderMap,
@@ -111,7 +114,6 @@ struct Client {
 
 impl Client {
     pub fn new() -> Result<Client, Error> {
-        let client = reqwest::Client::new();
         let token = dotenvy::var("GH_TOKEN").map_err(|_| Error::MissingToken)?;
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", "riirview".parse().unwrap());
@@ -125,7 +127,7 @@ impl Client {
         Ok(Client {
             base_url: config.github_base_url,
             headers,
-            client,
+            client: HTTP_CLIENT.clone(),
         })
     }
 
@@ -407,9 +409,13 @@ pub async fn mark_as_done(id: &String) -> Result<()> {
     client.mark_notification_done(id).await
 }
 
-pub async fn mark_as_done_multiple(ids: &Vec<String>) -> Result<()> {
+pub async fn mark_as_done_multiple(ids: Vec<String>) -> Result<()> {
+    let client = std::sync::Arc::new(Client::new()?);
     let results: Vec<Result<()>> = iter(ids)
-        .map(mark_as_done)
+        .map(|id| {
+            let client = client.clone();
+            async move { client.mark_notification_done(&id).await }
+        })
         .buffer_unordered(NB_TASK)
         .collect()
         .await;
@@ -569,7 +575,7 @@ mod tests {
             .create();
 
         let ids = vec!["fail_id".to_string(), "ok_id".to_string()];
-        let result = mark_as_done_multiple(&ids).await;
+        let result = mark_as_done_multiple(ids).await;
 
         assert!(
             result.is_err(),

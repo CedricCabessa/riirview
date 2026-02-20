@@ -202,8 +202,8 @@ pub async fn mark_notifications_as_done(
     connection: &mut DbConnection,
     notifs: &Vec<&DBNotification>,
 ) -> Result<()> {
-    let ids = notifs.iter().map(|n| n.id.clone()).collect();
-    gh::mark_as_done_multiple(&ids).await?;
+    let ids: Vec<String> = notifs.iter().map(|n| n.id.clone()).collect();
+    gh::mark_as_done_multiple(ids.clone()).await?;
     update(notifications)
         .filter(id.eq_any(ids))
         .set(done.eq(true))
