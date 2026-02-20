@@ -324,7 +324,7 @@ async fn get_issue(url: String) -> Result<Issue> {
     Ok(resp.json::<Issue>().await?)
 }
 
-const NB_TASK: usize = 30;
+const MAX_CONCURRENT_TASKS: usize = 30;
 
 pub async fn fetch_notifications(last_update: Option<NaiveDateTime>) -> Result<Vec<Notification>> {
     let client = Client::new()?;
@@ -337,7 +337,7 @@ pub async fn fetch_notifications(last_update: Option<NaiveDateTime>) -> Result<V
 
             iter(urls)
                 .map(get_notifications)
-                .buffer_unordered(NB_TASK)
+                .buffer_unordered(MAX_CONCURRENT_TASKS)
                 .try_fold(vec![], |mut acc, x| async {
                     acc.extend(x);
                     Ok(acc)
@@ -389,7 +389,7 @@ where
 
     Ok(iter(urls)
         .map(getter)
-        .buffer_unordered(NB_TASK)
+        .buffer_unordered(MAX_CONCURRENT_TASKS)
         .fold(vec![], |mut acc, r| async {
             match r {
                 Err(e) => {
@@ -417,7 +417,7 @@ pub async fn mark_as_done_multiple(ids: Vec<String>) -> Result<()> {
             let client = client.clone();
             async move { client.mark_notification_done(&id).await }
         })
-        .buffer_unordered(NB_TASK)
+        .buffer_unordered(MAX_CONCURRENT_TASKS)
         .collect()
         .await;
 
