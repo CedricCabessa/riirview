@@ -72,7 +72,7 @@ fn database_url() -> String {
         Ok(val) => val,
         Err(_) => {
             let db_path = directories.data.join("riirview.db");
-            db_path.to_str().unwrap().into()
+            db_path.to_string_lossy().into_owned()
         }
     }
 }

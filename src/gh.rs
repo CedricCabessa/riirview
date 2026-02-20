@@ -135,7 +135,7 @@ impl Client {
                 let since = last_update
                     .and_local_timezone(Utc)
                     .single()
-                    .unwrap()
+                    .ok_or(anyhow!("ambiguous UTC timezone conversion"))?
                     .to_rfc3339()
                     .replace("+00:00", "Z"); //FIXME: we should avoid this stupid replace
                 format!("{}/notifications?all=true&since={}", self.base_url, since)
@@ -165,7 +165,7 @@ impl Client {
         let since = last_update
             .and_local_timezone(Utc)
             .single()
-            .unwrap()
+            .ok_or(anyhow!("ambiguous UTC timezone conversion"))?
             .to_rfc2822();
         custom_headers.insert("If-Modified-Since", since.parse()?);
         self.head(url, Some(custom_headers)).await
@@ -513,7 +513,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mark_as_done_propagates_error() {
+    async fn test_mark_notification_done_propagates_error() {
         use tempfile::NamedTempFile;
 
         unsafe { std::env::set_var("GH_TOKEN", "faketoken") };
@@ -527,40 +527,41 @@ mod tests {
             rule_file.path().to_str().unwrap().to_string(),
         );
 
-        // Mock DELETE to return 500 Internal Server Error
+        let client = Client::new().unwrap();
+
+        // mark_notification_done should propagate HTTP errors
         server
             .mock("DELETE", "/notifications/threads/123")
             .with_status(500)
             .create();
 
         let id = "123".to_string();
-        let result = mark_as_done(&id).await;
-        assert!(result.is_err(), "mark_as_done should propagate HTTP errors");
-    }
-
-    #[tokio::test]
-    async fn test_mark_as_done_multiple_best_effort() {
-        use tempfile::NamedTempFile;
-
-        unsafe { std::env::set_var("GH_TOKEN", "faketoken") };
-
-        let mut server = mockito::Server::new_async().await;
-        let db_file = NamedTempFile::new().unwrap();
-        let rule_file = NamedTempFile::new().unwrap();
-        Config::init_for_test(
-            server.url(),
-            db_file.path().to_str().unwrap().to_string(),
-            rule_file.path().to_str().unwrap().to_string(),
+        let result = client.mark_notification_done(&id).await;
+        assert!(
+            result.is_err(),
+            "mark_notification_done should propagate HTTP errors"
         );
 
-        // First ID returns 500 (failure)
+        // mark_notification_done should succeed on 204
+        server
+            .mock("DELETE", "/notifications/threads/456")
+            .with_status(204)
+            .create();
+
+        let id = "456".to_string();
+        let result = client.mark_notification_done(&id).await;
+        assert!(
+            result.is_ok(),
+            "mark_notification_done should succeed on 204"
+        );
+
+        // mark_as_done_multiple best-effort: both endpoints should be called
         let mock_fail = server
             .mock("DELETE", "/notifications/threads/fail_id")
             .with_status(500)
             .expect(1)
             .create();
 
-        // Second ID returns 204 (success)
         let mock_ok = server
             .mock("DELETE", "/notifications/threads/ok_id")
             .with_status(204)
@@ -570,13 +571,11 @@ mod tests {
         let ids = vec!["fail_id".to_string(), "ok_id".to_string()];
         let result = mark_as_done_multiple(&ids).await;
 
-        // Should report the error
         assert!(
             result.is_err(),
             "mark_as_done_multiple should report failures"
         );
 
-        // Both endpoints should have been called (best-effort, no short-circuit)
         mock_fail.assert();
         mock_ok.assert();
     }

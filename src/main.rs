@@ -56,7 +56,9 @@ async fn tokio_main() -> Result<()> {
     );
     debug!("debug enabled");
 
-    let mut connection = get_connection_pool().get().unwrap();
+    let mut connection = get_connection_pool()
+        .get()
+        .context("Failed to get DB connection")?;
     run_db_migrations(&mut connection);
 
     tui::run().await

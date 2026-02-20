@@ -260,9 +260,9 @@ impl App<'_> {
             let max_len = lines
                 .iter()
                 .max_by(|a, b| a.width().cmp(&b.width()))
-                .unwrap();
-            let height: u16 = (lines.len() + 3).try_into().unwrap();
-            let width: u16 = (max_len.width() + 3).try_into().unwrap();
+                .expect("popup content always has at least one line");
+            let height: u16 = (lines.len() + 3).try_into().unwrap_or(u16::MAX);
+            let width: u16 = (max_len.width() + 3).try_into().unwrap_or(u16::MAX);
             let area = popup_area(area, height, width);
             let paragraph = Paragraph::new(lines);
             let block = Block::bordered().title(popup.title.as_str());
@@ -380,15 +380,20 @@ async fn handle_action(
             match res {
                 Ok(maybenotif) => {
                     if let Some(notification) = maybenotif {
-                        let new_pos = refresh(&mut connection, &query)
-                            .await
-                            .unwrap()
-                            .iter()
-                            .position(|it| it.id == notification.id)
-                            .unwrap();
-                        tx.send(Message::Ui(MessageUi::MoveTo(new_pos)))
-                            .await
-                            .expect("cannot send");
+                        match refresh(&mut connection, &query).await {
+                            Ok(refreshed) => {
+                                let new_pos = refreshed
+                                    .iter()
+                                    .position(|it| it.id == notification.id)
+                                    .unwrap_or(0);
+                                tx.send(Message::Ui(MessageUi::MoveTo(new_pos)))
+                                    .await
+                                    .expect("cannot send");
+                            }
+                            Err(e) => {
+                                error!("failed to refresh after score update: {}", e);
+                            }
+                        }
                     }
                     Ok(())
                 }
@@ -547,7 +552,7 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
                                 .expect("cannot send message");
                             Message::Ui(MessageUi::Redraw)
                         }
-                        _ => Message::Ui(MessageUi::SearchInput(event.unwrap())),
+                        _ => Message::Ui(MessageUi::SearchInput(Event::Key(key))),
                     }
                 }
             };
@@ -561,8 +566,12 @@ fn handle_input_loop(tx: mpsc::Sender<Message>) {
 async fn auto_sync_notifs_loop(tx: mpsc::Sender<Message>, pool: Pool<DbConnectionManager>) {
     loop {
         debug!("refreshing notifications");
-        let (refresh_delay, need_update) =
-            match service::check_update_and_limit(pool.get().unwrap()).await {
+        let (refresh_delay, need_update) = match pool.get() {
+            Err(e) => {
+                error!("failed to get DB connection: {}", e);
+                (REFRESH_DELAY_SEC, false)
+            }
+            Ok(conn) => match service::check_update_and_limit(conn).await {
                 Err(_) => (REFRESH_DELAY_SEC, true),
                 Ok(update_status) => {
                     debug!("gh status {update_status:?}");
@@ -571,7 +580,8 @@ async fn auto_sync_notifs_loop(tx: mpsc::Sender<Message>, pool: Pool<DbConnectio
                         update_status.need_update,
                     )
                 }
-            };
+            },
+        };
 
         info!("need_update: {need_update}, sleeping for: {refresh_delay} sec");
         if need_update {
