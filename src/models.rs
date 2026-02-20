@@ -106,3 +106,78 @@ impl Notification {
         self.repo.split('/').next().unwrap().to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diesel::connection::SimpleConnection;
+
+    fn setup_db() -> SqliteConnection {
+        let mut conn = SqliteConnection::establish(":memory:").unwrap();
+        conn.batch_execute(
+            "CREATE TABLE notifications (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                repo TEXT NOT NULL,
+                url TEXT NOT NULL,
+                type TEXT NOT NULL,
+                state TEXT NOT NULL,
+                author TEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                unread BOOLEAN NOT NULL DEFAULT 1,
+                done BOOLEAN NOT NULL DEFAULT 0,
+                score INTEGER NOT NULL DEFAULT 0,
+                score_boost INTEGER NOT NULL DEFAULT 0,
+                reason TEXT NOT NULL DEFAULT ''
+            )",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn insert_notification(conn: &mut SqliteConnection, type_val: &str, state_val: &str) {
+        diesel::sql_query(format!(
+            "INSERT INTO notifications (id, title, repo, url, type, state, author, reason)
+             VALUES ('1', 'test', 'org/repo', 'http://test', '{type_val}', '{state_val}', 'user', 'mention')"
+        ))
+        .execute(conn)
+        .unwrap();
+    }
+
+    #[test]
+    fn test_unknown_notification_type_returns_error() {
+        use crate::schema::notifications::dsl::*;
+        let mut conn = setup_db();
+        insert_notification(&mut conn, "UnknownType", "Open");
+        let result: Result<Vec<Notification>, _> = notifications
+            .select(Notification::as_select())
+            .load(&mut conn);
+        assert!(result.is_err(), "Expected Err for unknown type, but got Ok");
+    }
+
+    #[test]
+    fn test_unknown_notification_state_returns_error() {
+        use crate::schema::notifications::dsl::*;
+        let mut conn = setup_db();
+        insert_notification(&mut conn, "PullRequest", "UnknownState");
+        let result: Result<Vec<Notification>, _> = notifications
+            .select(Notification::as_select())
+            .load(&mut conn);
+        assert!(
+            result.is_err(),
+            "Expected Err for unknown state, but got Ok"
+        );
+    }
+
+    #[test]
+    fn test_valid_notification_type_roundtrips() {
+        use crate::schema::notifications::dsl::*;
+        let mut conn = setup_db();
+        insert_notification(&mut conn, "PullRequest", "Open");
+        let result: Vec<Notification> = notifications
+            .select(Notification::as_select())
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(result.len(), 1);
+    }
+}
