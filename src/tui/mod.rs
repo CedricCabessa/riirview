@@ -29,6 +29,8 @@ struct App<'a> {
     input_mode: InputMode,
     notifications: Vec<Notification>,
     dirty: bool,
+    empty_art_index: usize,
+    empty_tagline_index: usize,
 }
 
 impl App<'_> {
@@ -43,6 +45,9 @@ impl App<'_> {
         self.notifications = actions::refresh(&mut pool.clone().get()?, "").await?;
         self.dirty = false;
         self.reset_search();
+        if self.notifications.is_empty() {
+            self.randomize_empty_state();
+        }
         self.update_ui(
             MessageUi::UiUpdate(UiState::default()),
             tx.clone(),
@@ -75,9 +80,13 @@ impl App<'_> {
                 }
 
                 if self.dirty {
+                    let was_empty = self.notifications.is_empty();
                     self.notifications =
                         actions::refresh(&mut pool.clone().get()?, &self.search_string()).await?;
                     self.dirty = false;
+                    if !was_empty && self.notifications.is_empty() {
+                        self.randomize_empty_state();
+                    }
                 }
 
                 if self.popup.is_some() {
@@ -210,6 +219,19 @@ impl App<'_> {
         self.search_text = TextArea::default();
         let style = Style::default().remove_modifier(Modifier::UNDERLINED);
         self.search_text.set_cursor_line_style(style);
+    }
+
+    fn randomize_empty_state(&mut self) {
+        use rand::RngExt;
+        let mut rng = rand::rng();
+        let art_count = render::empty_state_art_count();
+        let tagline_count = render::empty_state_tagline_count();
+        if art_count > 0 {
+            self.empty_art_index = rng.random_range(0..art_count);
+        }
+        if tagline_count > 0 {
+            self.empty_tagline_index = rng.random_range(0..tagline_count);
+        }
     }
 }
 

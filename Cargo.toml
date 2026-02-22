@@ -5,6 +5,8 @@ edition = "2024"
 build = "build.rs"
 
 [dependencies]
+# FIXME: version 8 doesn't work
+ansi-to-tui = "7.0.0"
 anyhow = "1.0.102"
 chrono = { version = "0.4.43", features = ["serde"] }
 chrono-humanize = "0.2.3"
@@ -16,6 +18,7 @@ futures = "0.3.32"
 log = "0.4.29"
 log4rs = "1.4.0"
 open = "5.3.3"
+rand = "0.10.0"
 ratatui = "0.29.0"
 regex = "1.12.3"
 reqwest = { version = "0.12.28", features = ["json"] }

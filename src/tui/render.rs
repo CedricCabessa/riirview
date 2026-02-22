@@ -1,6 +1,7 @@
 use crate::models::{Notification, NotificationState, NotificationType};
 use crate::tui::App;
 use crate::tui::messages::InputMode;
+use ansi_to_tui::IntoText;
 use chrono_humanize::{Accuracy, HumanTime, Tense};
 use ratatui::Frame;
 use ratatui::style::{Modifier, Style};
@@ -13,6 +14,18 @@ use ratatui::{
     widgets::{Block, Clear, List},
 };
 use tui_textarea::TextArea;
+
+mod empty_state_generated {
+    include!(concat!(env!("OUT_DIR"), "/empty_state.rs"));
+}
+
+pub(crate) fn empty_state_art_count() -> usize {
+    empty_state_generated::ARTS.len()
+}
+
+pub(crate) fn empty_state_tagline_count() -> usize {
+    empty_state_generated::TAGLINES.len()
+}
 
 pub(crate) fn draw_frame(
     app: &App,
@@ -54,8 +67,17 @@ pub(crate) fn draw_frame(
         main_area
     };
 
-    let list = List::new(notifications).highlight_style(Modifier::REVERSED);
-    frame.render_stateful_widget(list, main_area, list_state);
+    if notifications.is_empty() {
+        render_empty_state(
+            frame,
+            main_area,
+            app.empty_art_index,
+            app.empty_tagline_index,
+        );
+    } else {
+        let list = List::new(notifications).highlight_style(Modifier::REVERSED);
+        frame.render_stateful_widget(list, main_area, list_state);
+    }
     if let Some(popup) = &app.popup {
         let area = frame.area();
         let lines: Vec<Line> = popup.content.split('\n').map(Line::from).collect();
@@ -79,6 +101,36 @@ fn popup_area(area: Rect, lines: u16, columns: u16) -> Rect {
     let [area] = vertical.areas(area);
     let [area] = horizontal.areas(area);
     area
+}
+
+fn render_empty_state(frame: &mut Frame, area: Rect, art_index: usize, tagline_index: usize) {
+    let arts = empty_state_generated::ARTS;
+    let taglines = empty_state_generated::TAGLINES;
+
+    if arts.is_empty() || taglines.is_empty() {
+        return;
+    }
+
+    let art_bytes = arts[art_index % arts.len()];
+    let tagline = taglines[tagline_index % taglines.len()].trim();
+
+    let mut art_text = art_bytes.into_text().unwrap_or_default();
+    art_text.push_line(Line::raw(""));
+    art_text.push_line(Line::raw(tagline));
+
+    let height: u16 = art_text.lines.len().try_into().unwrap_or(u16::MAX);
+    let width: u16 = art_text
+        .lines
+        .iter()
+        .map(|l| l.width())
+        .max()
+        .unwrap_or(0)
+        .try_into()
+        .unwrap_or(u16::MAX);
+
+    let centered = popup_area(area, height, width);
+    let paragraph = Paragraph::new(art_text).alignment(Alignment::Center);
+    frame.render_widget(paragraph, centered);
 }
 
 impl From<&Notification> for Text<'_> {
@@ -162,5 +214,33 @@ mod tests {
     fn test_ellipsis_multibyte_padding() {
         // Padding calculation should use char count, not byte length
         assert_eq!(ellipsis("hé", 5), "hé   ");
+    }
+
+    #[test]
+    fn test_all_art_files_parse_successfully() {
+        for (i, art_bytes) in empty_state_generated::ARTS.iter().enumerate() {
+            let result = art_bytes.into_text();
+            assert!(
+                result.is_ok(),
+                "Art file at index {i} failed to parse: {:?}",
+                result.err()
+            );
+            let text = result.unwrap();
+            assert!(
+                !text.lines.is_empty(),
+                "Art file at index {i} produced empty text"
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_taglines_are_non_empty() {
+        for (i, tagline) in empty_state_generated::TAGLINES.iter().enumerate() {
+            let trimmed = tagline.trim();
+            assert!(
+                !trimmed.is_empty(),
+                "Tagline at index {i} is empty or whitespace-only"
+            );
+        }
     }
 }
