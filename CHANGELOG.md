@@ -1,7 +1,9 @@
-# 1.4.2
-## future
+# 1.5.0
+## 2026-02-22
 
  - add `type:` in search
+ - big refacto using copilot and claude Opus 4.6
+ - add zero notification ascii art
 
 # 1.4.1
 ## 2025-09-30
