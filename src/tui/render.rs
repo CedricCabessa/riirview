@@ -19,6 +19,10 @@ mod empty_state_generated {
     include!(concat!(env!("OUT_DIR"), "/empty_state.rs"));
 }
 
+mod no_results_state_generated {
+    include!(concat!(env!("OUT_DIR"), "/no_results_state.rs"));
+}
+
 pub(crate) fn empty_state_art_count() -> usize {
     empty_state_generated::ARTS.len()
 }
@@ -68,12 +72,17 @@ pub(crate) fn draw_frame(
     };
 
     if notifications.is_empty() {
-        render_empty_state(
-            frame,
-            main_area,
-            app.empty_art_index,
-            app.empty_tagline_index,
-        );
+        let search_query = app.search_string();
+        if search_query.is_empty() {
+            render_empty_state(
+                frame,
+                main_area,
+                app.empty_art_index,
+                app.empty_tagline_index,
+            );
+        } else {
+            render_no_results(frame, main_area, &search_query);
+        }
     } else {
         let list = List::new(notifications).highlight_style(Modifier::REVERSED);
         frame.render_stateful_widget(list, main_area, list_state);
@@ -130,6 +139,35 @@ fn render_empty_state(frame: &mut Frame, area: Rect, art_index: usize, tagline_i
 
     let centered = popup_area(area, height, width);
     let paragraph = Paragraph::new(art_text).alignment(Alignment::Center);
+    frame.render_widget(paragraph, centered);
+}
+
+fn render_no_results(frame: &mut Frame, area: Rect, query: &str) {
+    let arts = no_results_state_generated::ARTS;
+
+    let mut text = if !arts.is_empty() {
+        arts[0].into_text().unwrap_or_default()
+    } else {
+        Text::default()
+    };
+
+    text.push_line(Line::raw(""));
+    text.push_line(Line::raw(format!("No results for \"{query}\"")));
+    text.push_line(Line::raw(""));
+    text.push_line(Line::raw("Try a different search or press Esc to clear"));
+
+    let height: u16 = text.lines.len().try_into().unwrap_or(u16::MAX);
+    let width: u16 = text
+        .lines
+        .iter()
+        .map(|l| l.width())
+        .max()
+        .unwrap_or(0)
+        .try_into()
+        .unwrap_or(u16::MAX);
+
+    let centered = popup_area(area, height, width);
+    let paragraph = Paragraph::new(text).alignment(Alignment::Center);
     frame.render_widget(paragraph, centered);
 }
 

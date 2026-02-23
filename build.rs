@@ -5,6 +5,7 @@ use vergen_git2::{Emitter, Git2Builder};
 pub fn main() {
     extract_help();
     generate_empty_state_assets();
+    generate_no_results_state_assets();
 
     let git2 = Git2Builder::default()
         .describe(true, true, None)
@@ -84,4 +85,31 @@ fn generate_empty_state_assets() {
 
     println!("cargo:rerun-if-changed=assets/art");
     println!("cargo:rerun-if-changed=assets/taglines");
+}
+
+fn generate_no_results_state_assets() {
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join("no_results_state.rs");
+
+    let mut arts: Vec<String> = fs::read_dir("assets/no-results-art")
+        .expect("assets/no-results-art directory must exist")
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "ans"))
+        .map(|e| e.path().display().to_string())
+        .collect();
+    arts.sort();
+
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+
+    let art_includes: String = arts
+        .iter()
+        .map(|p| format!("    include_bytes!(\"{manifest_dir}/{p}\"),"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let code = format!("pub const ARTS: &[&[u8]] = &[\n{art_includes}\n];\n");
+
+    fs::write(&dest_path, code).unwrap();
+
+    println!("cargo:rerun-if-changed=assets/no-results-art");
 }
