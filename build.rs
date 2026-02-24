@@ -43,73 +43,56 @@ fn extract_help() {
 }
 
 fn generate_empty_state_assets() {
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let dest_path = Path::new(&out_dir).join("empty_state.rs");
+    let arts = collect_asset_paths("assets/art", "ans");
+    let taglines = collect_asset_paths("assets/taglines", "txt");
 
-    let mut arts: Vec<String> = fs::read_dir("assets/art")
-        .expect("assets/art directory must exist")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "ans"))
-        .map(|e| e.path().display().to_string())
-        .collect();
-    arts.sort();
+    let mut code = generate_const_array("ARTS", "&[u8]", "include_bytes", &arts);
+    code.push('\n');
+    code.push_str(&generate_const_array(
+        "TAGLINES",
+        "&str",
+        "include_str",
+        &taglines,
+    ));
 
-    let mut taglines: Vec<String> = fs::read_dir("assets/taglines")
-        .expect("assets/taglines directory must exist")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "txt"))
-        .map(|e| e.path().display().to_string())
-        .collect();
-    taglines.sort();
-
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-
-    let art_includes: String = arts
-        .iter()
-        .map(|p| format!("    include_bytes!(\"{manifest_dir}/{p}\"),"))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let tagline_includes: String = taglines
-        .iter()
-        .map(|p| format!("    include_str!(\"{manifest_dir}/{p}\"),"))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let code = format!(
-        "pub const ARTS: &[&[u8]] = &[\n{art_includes}\n];\n\n\
-         pub const TAGLINES: &[&str] = &[\n{tagline_includes}\n];\n"
-    );
-
-    fs::write(&dest_path, code).unwrap();
-
-    println!("cargo:rerun-if-changed=assets/art");
-    println!("cargo:rerun-if-changed=assets/taglines");
+    write_asset_module("empty_state.rs", &code, &["assets/art", "assets/taglines"]);
 }
 
 fn generate_no_results_state_assets() {
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let dest_path = Path::new(&out_dir).join("no_results_state.rs");
+    let arts = collect_asset_paths("assets/no-results-art", "ans");
+    let code = generate_const_array("ARTS", "&[u8]", "include_bytes", &arts);
+    write_asset_module("no_results_state.rs", &code, &["assets/no-results-art"]);
+}
 
-    let mut arts: Vec<String> = fs::read_dir("assets/no-results-art")
-        .expect("assets/no-results-art directory must exist")
+/// Collect sorted file paths from a directory, filtered by extension.
+fn collect_asset_paths(dir: &str, ext: &str) -> Vec<String> {
+    let mut paths: Vec<String> = fs::read_dir(dir)
+        .unwrap_or_else(|_| panic!("{dir} directory must exist"))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "ans"))
+        .filter(|e| e.path().extension().is_some_and(|e| e == ext))
         .map(|e| e.path().display().to_string())
         .collect();
-    arts.sort();
+    paths.sort();
+    paths
+}
 
+/// Generate an `include_bytes!` or `include_str!` array constant.
+fn generate_const_array(name: &str, typ: &str, macro_name: &str, paths: &[String]) -> String {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-
-    let art_includes: String = arts
+    let includes: String = paths
         .iter()
-        .map(|p| format!("    include_bytes!(\"{manifest_dir}/{p}\"),"))
+        .map(|p| format!("    {macro_name}!(\"{manifest_dir}/{p}\"),"))
         .collect::<Vec<_>>()
         .join("\n");
+    format!("pub const {name}: &[{typ}] = &[\n{includes}\n];\n")
+}
 
-    let code = format!("pub const ARTS: &[&[u8]] = &[\n{art_includes}\n];\n");
-
+/// Write generated code to `$OUT_DIR/{filename}` and emit `rerun-if-changed` for each directory.
+fn write_asset_module(filename: &str, code: &str, watched_dirs: &[&str]) {
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join(filename);
     fs::write(&dest_path, code).unwrap();
-
-    println!("cargo:rerun-if-changed=assets/no-results-art");
+    for dir in watched_dirs {
+        println!("cargo:rerun-if-changed={dir}");
+    }
 }
